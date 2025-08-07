@@ -29,17 +29,23 @@ describe('Memory', () => {
     expect(mem.read(0x8000)).toBe(0)
   })
 
-  test('externalRead e externalWrite são usados se definidos', () => {
-    const readMap: Record<number, number> = { 0x8000: 0xAB }
-    const writes: [number, number][] = []
+  test('loadRom carrega PRG ROM e define vetor de reset', () => {
+    const mem = new Memory()
 
-    const mem = new Memory(
-      addr => readMap[addr] ?? 0,
-      (addr, val) => writes.push([addr, val])
-    )
+    // PRG ROM de exemplo
+    const prgRom = new Uint8Array([0xAA, 0xBB, 0xCC])
+    mem.loadRom(prgRom)
 
-    expect(mem.read(0x8000)).toBe(0xAB)
-    mem.write(0x9000, 0x77)
-    expect(writes).toContainEqual([0x9000, 0x77])
+    // Verifica se os dados foram gravados corretamente a partir de 0x8000
+    expect(mem.read(0x8000)).toBe(0xAA)
+    expect(mem.read(0x8001)).toBe(0xBB)
+    expect(mem.read(0x8002)).toBe(0xCC)
+
+    // Verifica se o vetor de reset foi configurado corretamente para 0x8000
+    const lo = mem.read(0xFFFC)
+    const hi = mem.read(0xFFFD)
+    const resetVector = (hi << 8) | lo
+
+    expect(resetVector).toBe(0x8000)
   })
 })

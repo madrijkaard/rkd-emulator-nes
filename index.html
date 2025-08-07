@@ -12,35 +12,81 @@
         display: flex;
         flex-direction: column;
         align-items: center;
-        justify-content: center;
+        justify-content: flex-start;
         min-height: 100vh;
         margin: 0;
         padding: 2rem;
+        gap: 1rem;
       }
 
       h1 {
-        font-size: 2.5rem;
-        margin-bottom: 2rem;
+        font-size: 2.2rem;
+        margin: 0 0 1rem 0;
       }
 
       label {
         font-size: 1.1rem;
-        margin-bottom: 0.5rem;
+        margin-bottom: 0.25rem;
         display: block;
       }
 
-      input[type="file"] {
+      input[type="file"],
+      button {
         background-color: #2c2c2c;
         color: #f5f5f5;
         border: 1px solid #444;
-        padding: 0.5rem;
+        padding: 0.5rem 1rem;
         font-size: 1rem;
         cursor: pointer;
+        margin-top: 0.5rem;
+        margin-bottom: 0.5rem;
+      }
+
+      button:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
+
+      fieldset.debug {
+        width: 100%;
+        max-width: 600px;
+        border: 1px solid #555;
+        border-radius: 8px;
+        padding: 0.75rem 1rem 1rem 1rem;
+        background: #1b1b1b;
+      }
+
+      fieldset.debug legend {
+        padding: 0 0.5rem;
+        color: #9fd3ff;
+        font-weight: 600;
+      }
+
+      .debug-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.4rem 1rem;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        line-height: 1.5;
+      }
+
+      .debug-grid .label {
+        color: #9aa0a6;
+      }
+
+      .debug-grid .value {
+        color: #b3e5fc;
+      }
+
+      .flags {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        color: #c3f3c3;
+        letter-spacing: 1px;
       }
 
       .output {
-        margin-top: 2rem;
-        font-family: monospace;
+        margin-top: 0.5rem;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
         white-space: pre-wrap;
         background: #1e1e1e;
         padding: 1rem;
@@ -57,6 +103,31 @@
 
     <label for="romInput">Selecione uma ROM (.nes)</label>
     <input type="file" id="romInput" accept=".nes" />
+    <button id="stepBtn" disabled>Executar Instrução (Step)</button>
+
+    <!-- Painel de Depuração -->
+    <fieldset class="debug">
+      <legend>Registradores e Flags</legend>
+      <div class="debug-grid">
+        <div class="label">A:</div>
+        <div class="value" id="regA">--</div>
+
+        <div class="label">X:</div>
+        <div class="value" id="regX">--</div>
+
+        <div class="label">Y:</div>
+        <div class="value" id="regY">--</div>
+
+        <div class="label">SP:</div>
+        <div class="value" id="regSP">--</div>
+
+        <div class="label">PC:</div>
+        <div class="value" id="regPC">--</div>
+
+        <div class="label">Flags (NVUBDIZC):</div>
+        <div class="value flags" id="regP">--------</div>
+      </div>
+    </fieldset>
 
     <div class="output" id="output">Nenhum arquivo escolhido</div>
 
