@@ -1,77 +1,89 @@
-import type { Mapper } from '../mappers/Mapper'
+import type { Mapper } from '../mappers/Mapper';
+import { Ppu } from '../ppu/Ppu';
 
 export class Memory {
-  private ram = new Uint8Array(0x0800) // 2KB de RAM (0x0000–0x07FF) + espelhos
-  private program = new Uint8Array(0x10000) // fallback para seus testes atuais
-  private mapper: Mapper | null = null
+    private ram = new Uint8Array(0x0800); // 2KB de RAM
+    private ppu: Ppu;
+    private mapper: Mapper | null = null;
 
-  constructor() {}
-
-  attachMapper(mapper: Mapper) {
-    this.mapper = mapper
-    this.mapper.reset()
-  }
-
-  /**
-   * Carrega um programa na memória a partir de um endereço (por padrão 0x8000)
-   * e preenche o restante da memória com NOPs.
-   * (mantido para seus testes unitários)
-   */
-  loadProgram(program: Uint8Array, startAddr: number = 0x8000) {
-    this.program.fill(0xEA) // Preenche com NOPs
-    for (let i = 0; i < program.length; i++) {
-      this.program[startAddr + i] = program[i]
-    }
-  }
-
-  /**
-   * Carrega a PRG ROM da ROM iNES e configura o vetor de reset.
-   * (mantido para seus testes unitários)
-   */
-  loadRom(prgRom: Uint8Array, startAddr: number = 0x8000) {
-    for (let i = 0; i < prgRom.length; i++) {
-      this.write(startAddr + i, prgRom[i])
-    }
-    // Define o vetor de reset para o início da PRG ROM
-    this.write(0xFFFC, startAddr & 0xFF)        // Low byte
-    this.write(0xFFFD, (startAddr >> 8) & 0xFF) // High byte
-  }
-
-  read(addr: number): number {
-    // RAM principal (0x0000–0x1FFF) com espelhamento
-    if (addr < 0x2000) {
-      return this.ram[addr % 0x0800]
+    constructor() {
+        this.ppu = new Ppu(this);
     }
 
-    // Mapas da CPU (PPU/APU/IO) ficariam aqui (0x2000–0x5FFF) — fora do escopo agora
-
-    // Se houver mapper, delega 0x6000–0xFFFF
-    if (this.mapper && addr >= 0x6000) {
-      return this.mapper.cpuRead(addr) & 0xff
+    attachMapper(mapper: Mapper): void {
+        this.mapper = mapper;
+        this.mapper.reset();
     }
 
-    // Fallback para seus testes
-    return this.program[addr] || 0
-  }
+    read(addr: number): number {
+        addr &= 0xFFFF; // Garante 16-bit
 
-  write(addr: number, value: number): void {
-    value &= 0xff
+        // RAM principal (0x0000-0x1FFF) com espelhamento
+        if (addr < 0x2000) {
+            return this.ram[addr % 0x0800];
+        }
 
-    // RAM principal (0x0000–0x1FFF) com espelhamento
-    if (addr < 0x2000) {
-      this.ram[addr % 0x0800] = value
-      return
+        // PPU (0x2000-0x3FFF) com espelhamento
+        if (addr >= 0x2000 && addr <= 0x3FFF) {
+            return this.ppu.readRegister(addr & 0x2007);
+        }
+
+        // APU e I/O (0x4000-0x4017)
+        if (addr >= 0x4000 && addr <= 0x4017) {
+            // Implementação básica - retorna 0 para I/O não implementado
+            return 0;
+        }
+
+        // Mapper (0x6000-0xFFFF)
+        if (this.mapper && addr >= 0x6000) {
+            return this.mapper.cpuRead(addr);
+        }
+
+        // Espaço não mapeado
+        return 0;
     }
 
-    // Mapas da CPU (PPU/APU/IO) ficariam aqui (0x2000–0x5FFF)
+    write(addr: number, value: number): void {
+        addr &= 0xFFFF;
+        value &= 0xFF;
 
-    // Se houver mapper, delega 0x6000–0xFFFF
-    if (this.mapper && addr >= 0x6000) {
-      this.mapper.cpuWrite(addr, value)
-      return
+        // RAM principal (0x0000-0x1FFF)
+        if (addr < 0x2000) {
+            this.ram[addr % 0x0800] = value;
+            return;
+        }
+
+        // PPU (0x2000-0x3FFF)
+        if (addr >= 0x2000 && addr <= 0x3FFF) {
+            this.ppu.writeRegister(addr & 0x2007, value);
+            return;
+        }
+
+        // APU e I/O (0x4000-0x4017)
+        if (addr >= 0x4000 && addr <= 0x4017) {
+            // Implementação básica - ignora writes para I/O não implementado
+            return;
+        }
+
+        // Mapper (0x6000-0xFFFF)
+        if (this.mapper && addr >= 0x6000) {
+            this.mapper.cpuWrite(addr, value);
+            return;
+        }
     }
 
-    // Fallback para seus testes
-    this.program[addr] = value
-  }
+    // Métodos auxiliares para testes
+    loadProgram(program: Uint8Array, startAddr: number = 0x8000): void {
+        for (let i = 0; i < program.length; i++) {
+            this.write(startAddr + i, program[i]);
+        }
+    }
+
+    loadRom(prgRom: Uint8Array, startAddr: number = 0x8000): void {
+        for (let i = 0; i < prgRom.length; i++) {
+            this.write(startAddr + i, prgRom[i]);
+        }
+        this.write(0xFFFC, startAddr & 0xFF);
+        this.write(0xFFFD, (startAddr >> 8) & 0xFF);
+    }
 }

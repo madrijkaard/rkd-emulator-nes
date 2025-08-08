@@ -1,172 +1,314 @@
-import { RomLoader } from './rom/RomLoader'
-import { Memory } from './memory/Memory'
-import { Cpu6502 } from './cpu/Cpu6502'
-import { Mapper0 } from './mappers/Mapper0'
-import { buildTestRom } from './rom/TestRomBuilder'
+import { RomLoader } from './rom/RomLoader';
+import { Memory } from './memory/Memory';
+import { Cpu6502 } from './cpu/Cpu6502';
+import { Mapper0 } from './mappers/Mapper0';
+import { Mapper4 } from './mappers/Mapper4';
+import { buildTestRom } from './rom/TestRomBuilder';
+import { disassemble6502 } from './cpu/Disassembler';
+import { Flags6502 } from './cpu/Flags6502';
+import { Renderer } from './ppu/Renderer';
 
-const ENABLE_TEST_ROM = false  // deixe true para verificar rapidamente
+// Configuração
+const ENABLE_TEST_ROM = false;
+const FRAME_CYCLES = 29780; // Ciclos por frame NTSC
+const MAX_STEPS_PER_FRAME = 1000;
+
+// Estado do emulador
+let cpu: Cpu6502 | null = null;
+let ppuRenderer: Renderer | null = null;
+let running = false;
+let animationFrameId: number | null = null;
+let lastFrameTime = 0;
+let cycleCount = 0;
+
+// Elementos UI
+const elements = {
+    romInput: document.getElementById('romInput') as HTMLInputElement,
+    resetBtn: document.getElementById('resetBtn') as HTMLButtonElement,
+    stepBtn: document.getElementById('stepBtn') as HTMLButtonElement,
+    runBtn: document.getElementById('runBtn') as HTMLButtonElement,
+    pauseBtn: document.getElementById('pauseBtn') as HTMLButtonElement,
+    output: document.getElementById('output') as HTMLDivElement,
+    canvas: document.getElementById('nesCanvas') as HTMLCanvasElement,
+    regA: document.getElementById('regA') as HTMLDivElement,
+    regX: document.getElementById('regX') as HTMLDivElement,
+    regY: document.getElementById('regY') as HTMLDivElement,
+    regSP: document.getElementById('regSP') as HTMLDivElement,
+    regPC: document.getElementById('regPC') as HTMLDivElement,
+    regP: document.getElementById('regP') as HTMLDivElement,
+    disassembly: document.getElementById('disassembly') as HTMLDivElement
+};
 
 function init() {
-  const input = document.getElementById('romInput') as HTMLInputElement
-  const stepBtn = document.getElementById('stepBtn') as HTMLButtonElement
-  const output = document.getElementById('output') as HTMLDivElement
-
-  let cpu: Cpu6502 | null = null
-
-  async function bootWithRomBytes(romBytes: Uint8Array) {
-    console.log('[BOOT] Iniciando bootWithRomBytes...')
-    const loader = new RomLoader(romBytes)
-
-    const mapperId = loader.header.mapper
-    const mapperName =
-      mapperId === 0 ? 'Mapper 0 (NROM)' :
-      mapperId === 4 ? 'Mapper 4 (MMC3)' :
-      `Mapper ${mapperId}`
-
-    if (mapperId !== 0) {
-      output.textContent = [
-        'ROM carregada, mas este mapper não é suportado ainda.',
-        `Detectado: ${mapperName}`,
-        mapperId === 4
-          ? 'Ex.: Super Mario Bros. 3 usa MMC3 (troca de bancos PRG/CHR + IRQ de scanline).'
-          : 'Por enquanto apenas NROM (Mapper 0) é suportado.'
-      ].join('\n')
-      stepBtn.disabled = true
-      clearDebug()
-      cpu = null
-      return
-    }
-
-    const memory = new Memory()
-    memory.attachMapper(new Mapper0(loader.prgRom, loader.chrRom))
-
-    cpu = new Cpu6502(memory)
-    cpu.reset()
-    updateDebug(cpu)
-
-    output.textContent = `
-ROM carregada com sucesso:
-PRG ROM: ${loader.header.prgRomSize} bytes
-CHR ROM: ${loader.header.chrRomSize} bytes
-Flags 6: ${loader.header.flags6.toString(2).padStart(8, '0')}
-Flags 7: ${loader.header.flags7.toString(2).padStart(8, '0')}
-Mapper: ${mapperName}
-PC Inicial: $${cpu.PC.toString(16).padStart(4, '0')}
-`.trim()
-
-    stepBtn.disabled = false
-    console.log('[BOOT] Pronto. Step habilitado.')
-  }
-
-  async function bootWithFile(file: File) {
-    try {
-      const arrayBuffer = await file.arrayBuffer()
-      await bootWithRomBytes(new Uint8Array(arrayBuffer))
-    } catch (err) {
-      console.error('Erro ao carregar ROM:', err)
-      output.textContent = `Erro: ${(err as Error).message}`
-      stepBtn.disabled = true
-      clearDebug()
-      cpu = null
-    }
-  }
-
-  // Auto-boot ROM de teste
-  ;(async () => {
-    try {
-      if (ENABLE_TEST_ROM) {
-        console.log('[BOOT] Criando ROM de teste…')
-        const rom = buildTestRom()
-        await bootWithRomBytes(rom)
-      } else {
-        output.textContent = 'Nenhum arquivo escolhido'
-      }
-    } catch (e) {
-      console.error(e)
-      output.textContent = `Erro ao inicializar ROM de teste: ${(e as Error).message}`
-    }
-  })()
-
-  // Upload manual
-  input.addEventListener('change', async () => {
-    const file = input.files?.[0]
-    if (!file) {
-      output.textContent = 'Nenhum arquivo escolhido'
-      stepBtn.disabled = true
-      clearDebug()
-      cpu = null
-      return
-    }
-    await bootWithFile(file)
-  })
-
-  stepBtn.addEventListener('click', () => {
-    if (!cpu) return
-    try {
-      cpu.step()
-      updateDebug(cpu)
-      output.textContent += `\nInstrução executada. Novo PC: $${cpu.PC.toString(16).padStart(4, '0')}`
-    } catch (err) {
-      output.textContent += `\nErro durante execução: ${(err as Error).message}`
-      stepBtn.disabled = true
-    }
-  })
-
-  function updateDebug(cpu: Cpu6502) {
-    const setText = (id: string, text: string) => {
-      const el = document.getElementById(id)
-      if (el) el.textContent = text
-    }
-    const setHtml = (id: string, html: string) => {
-      const el = document.getElementById(id)
-      if (el) el.innerHTML = html
-    }
-    const hx = (v: number, w: number) => v.toString(16).toUpperCase().padStart(w, '0')
-
-    setText('regA', `$${hx(cpu.A, 2)}`)
-    setText('regX', `$${hx(cpu.X, 2)}`)
-    setText('regY', `$${hx(cpu.Y, 2)}`)
-    setText('regSP', `$${hx(cpu.SP, 2)}`)
-    setText('regPC', `$${hx(cpu.PC, 4)}`)
-    setHtml('regP', formatFlagsHtml(cpu.P))
-  }
-
-  function clearDebug() {
-    const blanks: Record<string, string> = {
-      regA: '--', regX: '--', regY: '--', regSP: '--', regPC: '--', regP: '--------'
-    }
-    Object.entries(blanks).forEach(([id, val]) => {
-      const el = document.getElementById(id)
-      if (!el) return
-      el.textContent = val
-    })
-  }
-
-  function formatFlagsHtml(p: number): string {
-    type FlagDef = { bit: number; label: string; title: string }
-    const defs: FlagDef[] = [
-      { bit: 7, label: 'N', title: 'Negative' },
-      { bit: 6, label: 'V', title: 'Overflow' },
-      { bit: 5, label: 'U', title: 'Unused' },
-      { bit: 4, label: 'B', title: 'Break' },
-      { bit: 3, label: 'D', title: 'Decimal (unused no NES)' },
-      { bit: 2, label: 'I', title: 'Interrupt Disable' },
-      { bit: 1, label: 'Z', title: 'Zero' },
-      { bit: 0, label: 'C', title: 'Carry' },
-    ]
-    return defs.map(def => {
-      const on = ((p >> def.bit) & 1) !== 0
-      const base = 'display:inline-block;margin-right:2px;padding:0 3px;border-radius:4px;font-weight:600;'
-      const styleOn = 'color:#0f0;background:#214d21;border:1px solid #2e7d32;'
-      const styleOff = 'color:#9aa0a6;background:#222;border:1px solid #333;opacity:0.7;'
-      return `<span title="${def.title}" style="${base + (on ? styleOn : styleOff)}">${def.label}</span>`
-    }).join('')
-  }
+    setupEventListeners();
+    setupKeyboardShortcuts();
+    clearScreen();
+    updateUI();
+    ppuRenderer = new Renderer(elements.canvas);
 }
 
-// ✅ roda já se o DOM estiver pronto; caso contrário, espera o evento
+function setupEventListeners() {
+    elements.romInput.addEventListener('change', async () => {
+        const file = elements.romInput.files?.[0];
+        if (!file) return;
+        
+        try {
+            showMessage('Carregando ROM...');
+            const arrayBuffer = await file.arrayBuffer();
+            await bootWithRomBytes(new Uint8Array(arrayBuffer));
+            showMessage(`ROM "${file.name}" carregada com sucesso`);
+        } catch (err) {
+            handleError(err as Error);
+        }
+    });
+
+    elements.stepBtn.addEventListener('click', stepExecution);
+    elements.runBtn.addEventListener('click', startRunning);
+    elements.pauseBtn.addEventListener('click', pauseExecution);
+    elements.resetBtn.addEventListener('click', resetExecution);
+
+    if (ENABLE_TEST_ROM) {
+        bootWithRomBytes(buildTestRom()).catch(handleError);
+    }
+}
+
+function setupKeyboardShortcuts() {
+    document.addEventListener('keydown', (e) => {
+        if (!cpu) return;
+        
+        switch(e.key) {
+            case 'F1': resetExecution(); break;
+            case 'F5': startRunning(); break;
+            case 'F6': pauseExecution(); break;
+            case 'F8': stepExecution(); break;
+        }
+    });
+}
+
+async function bootWithRomBytes(romBytes: Uint8Array) {
+    try {
+        const loader = new RomLoader(romBytes);
+        
+        if (loader.header.mapper !== 0 && loader.header.mapper !== 4) {
+            throw new Error(`Mapper não suportado: ${loader.header.mapper}`);
+        }
+
+        const memory = new Memory();
+        
+        if (loader.header.mapper === 0) {
+            memory.attachMapper(new Mapper0(loader.prgRom, loader.chrRom));
+        } else if (loader.header.mapper === 4) {
+            memory.attachMapper(new Mapper4(loader.prgRom, loader.chrRom));
+        }
+
+        cpu = new Cpu6502(memory);
+        cpu.reset();
+        
+        updateUI();
+        enableControls(true);
+        clearScreen();
+        
+    } catch (err) {
+        handleError(err as Error);
+    }
+}
+
+function stepExecution() {
+    if (!cpu || running) return;
+    
+    try {
+        const cycles = cpu.step();
+        cycleCount += cycles;
+        
+        // Executa a PPU (3 ciclos PPU por ciclo CPU)
+        for (let i = 0; i < cycles * 3; i++) {
+            cpu.memory.read(0x2002); // Acesso falso para sincronização
+        }
+        
+        // Renderiza a cada frame completo
+        if (cycleCount >= FRAME_CYCLES) {
+            if (ppuRenderer) {
+                ppuRenderer.renderFrame();
+            }
+            cycleCount = 0;
+        }
+        
+        updateUI();
+    } catch (err) {
+        handleError(err as Error);
+    }
+}
+
+function startRunning() {
+    if (running || !cpu) return;
+    
+    running = true;
+    lastFrameTime = performance.now();
+    cycleCount = 0;
+    enableControls();
+    
+    function runFrame(currentTime: number) {
+        if (!running || !cpu) return;
+        
+        try {
+            const deltaTime = currentTime - lastFrameTime;
+            lastFrameTime = currentTime;
+            
+            const targetCycles = Math.floor((deltaTime / 1000) * 1789773); // ~1.79MHz
+            let executedCycles = 0;
+            
+            while (executedCycles < targetCycles && executedCycles < MAX_STEPS_PER_FRAME) {
+                const cycles = cpu.step();
+                executedCycles += cycles;
+                cycleCount += cycles;
+                
+                // Executa a PPU
+                for (let i = 0; i < cycles * 3; i++) {
+                    cpu.memory.read(0x2002); // Acesso falso
+                }
+                
+                if (cycleCount >= FRAME_CYCLES) {
+                    if (ppuRenderer) {
+                        ppuRenderer.renderFrame();
+                    }
+                    cycleCount = 0;
+                    break;
+                }
+            }
+            
+            updateUI();
+            animationFrameId = requestAnimationFrame(runFrame);
+        } catch (err) {
+            handleError(err as Error);
+            pauseExecution();
+        }
+    }
+    
+    animationFrameId = requestAnimationFrame(runFrame);
+}
+
+function pauseExecution() {
+    running = false;
+    if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+        animationFrameId = null;
+    }
+    enableControls();
+}
+
+function resetExecution() {
+    if (!cpu) return;
+    
+    pauseExecution();
+    cpu.reset();
+    cycleCount = 0;
+    updateUI();
+    clearScreen();
+}
+
+function updateUI() {
+    if (!cpu) {
+        clearUI();
+        return;
+    }
+    
+    updateRegisters();
+    updateDisassembly();
+}
+
+function updateRegisters() {
+    if (!cpu) return;
+    
+    const hx = (v: number, w: number) => v.toString(16).toUpperCase().padStart(w, '0');
+    
+    elements.regA.textContent = `$${hx(cpu.A, 2)}`;
+    elements.regX.textContent = `$${hx(cpu.X, 2)}`;
+    elements.regY.textContent = `$${hx(cpu.Y, 2)}`;
+    elements.regSP.textContent = `$${hx(cpu.SP, 2)}`;
+    elements.regPC.textContent = `$${hx(cpu.PC, 4)}`;
+    elements.regP.innerHTML = formatFlags(cpu.P);
+}
+
+function updateDisassembly() {
+    if (!cpu || !elements.disassembly) return;
+
+    let html = '';
+    const startAddr = Math.max(0, cpu.PC - 5);
+    const endAddr = Math.min(0xFFFF, cpu.PC + 5);
+
+    for (let addr = startAddr; addr <= endAddr; addr++) {
+        const opcode = cpu.read(addr);
+        const instruction = disassemble6502(opcode, addr, cpu);
+        const isCurrent = addr === cpu.PC;
+        
+        html += `<div class="${isCurrent ? 'current' : ''}">
+            $${addr.toString(16).padStart(4, '0')}: ${instruction}
+        </div>`;
+    }
+
+    elements.disassembly.innerHTML = html;
+    
+    const currentLine = elements.disassembly.querySelector('.current');
+    if (currentLine) {
+        currentLine.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+}
+
+function formatFlags(p: number): string {
+    const flags = [
+        { bit: Flags6502.Negative, label: 'N' },
+        { bit: Flags6502.Overflow, label: 'V' },
+        { bit: Flags6502.Unused, label: 'U' },
+        { bit: Flags6502.Break, label: 'B' },
+        { bit: Flags6502.Decimal, label: 'D' },
+        { bit: Flags6502.InterruptDisable, label: 'I' },
+        { bit: Flags6502.Zero, label: 'Z' },
+        { bit: Flags6502.Carry, label: 'C' },
+    ];
+    
+    return flags.map(f => {
+        const set = (p & f.bit) !== 0;
+        return `<span class="flag-${set ? 'on' : 'off'}" title="${f.label}">${f.label}</span>`;
+    }).join('');
+}
+
+function clearScreen() {
+    if (ppuRenderer) {
+        ppuRenderer.clear();
+    }
+}
+
+function clearUI() {
+    elements.regA.textContent = '--';
+    elements.regX.textContent = '--';
+    elements.regY.textContent = '--';
+    elements.regSP.textContent = '--';
+    elements.regPC.textContent = '--';
+    elements.regP.textContent = 'NVUBDIZC';
+    elements.disassembly.innerHTML = '';
+}
+
+function enableControls(enabled = false) {
+    const hasCpu = !!cpu;
+    elements.stepBtn.disabled = !hasCpu || running;
+    elements.runBtn.disabled = !hasCpu || running;
+    elements.pauseBtn.disabled = !hasCpu || !running;
+    elements.resetBtn.disabled = !hasCpu;
+}
+
+function showMessage(message: string) {
+    elements.output.textContent = message;
+}
+
+function handleError(err: Error) {
+    console.error(err);
+    showMessage(`Erro: ${err.message}`);
+    pauseExecution();
+}
+
+// Inicialização
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', init)
+    document.addEventListener('DOMContentLoaded', init);
 } else {
-  init()
+    init();
 }
