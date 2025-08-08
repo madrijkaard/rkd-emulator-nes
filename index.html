@@ -14,6 +14,8 @@
         --flag-on: #4caf50;
         --flag-off: #f44336;
         --border-color: #444;
+        --success: #8bc34a;
+        --error: #ff6b6b;
       }
 
       body {
@@ -42,7 +44,7 @@
         gap: 1rem;
         flex-wrap: wrap;
         justify-content: center;
-        margin-bottom: 1rem;
+        margin-bottom: 0.5rem;
       }
 
       button, input[type="file"] {
@@ -75,8 +77,15 @@
         background-color: #000;
         border: 4px solid var(--border-color);
         image-rendering: pixelated;
+        /* upscale 2x preservando proporção NES (256x240) */
         width: 512px;
         height: 480px;
+      }
+
+      #fpsCounter {
+        font-family: monospace;
+        color: var(--debug-color);
+        align-self: center;
       }
 
       .debug-panel {
@@ -150,6 +159,9 @@
         border: 1px solid var(--border-color);
       }
 
+      .output.success { color: var(--success); }
+      .output.error { color: var(--error); }
+
       .disassembly {
         height: 200px;
         overflow-y: auto;
@@ -185,7 +197,7 @@
         border-radius: 4px;
       }
 
-      /* Efeito de loading para o canvas */
+      /* Efeito de loading para o canvas (opcional, basta aplicar .loading no canvas quando quiser) */
       .loading::after {
         content: "Loading...";
         position: absolute;
@@ -229,6 +241,7 @@
     </div>
 
     <canvas id="nesCanvas" width="256" height="240"></canvas>
+    <div id="fpsCounter">FPS: 0</div>
 
     <div class="debug-panel">
       <fieldset>
@@ -236,14 +249,19 @@
         <div class="debug-grid">
           <div class="label">A (Accumulator):</div>
           <div class="value" id="regA">--</div>
+
           <div class="label">X (Index X):</div>
           <div class="value" id="regX">--</div>
+
           <div class="label">Y (Index Y):</div>
           <div class="value" id="regY">--</div>
+
           <div class="label">SP (Stack Pointer):</div>
           <div class="value" id="regSP">--</div>
+
           <div class="label">PC (Program Counter):</div>
           <div class="value" id="regPC">--</div>
+
           <div class="label">Status Flags:</div>
           <div class="value" id="regP">NVUBDIZC</div>
         </div>

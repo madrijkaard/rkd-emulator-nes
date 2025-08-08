@@ -1,3 +1,4 @@
+// src/cpu/Cpu6502.ts
 import { Memory } from '../memory/Memory'
 import { Flags6502 } from './Flags6502'
 
@@ -17,7 +18,42 @@ export class Cpu6502 {
     this.PC = (hi << 8) | lo
     this.SP = 0xfd
     this.P |= Flags6502.Unused
-    console.log(`[CPU] Reset completo: PC=$${this.PC.toString(16).padStart(4, '0')} SP=${this.SP.toString(16)}`)
+    console.log(
+      `[CPU] Reset completo: PC=$${this.PC.toString(16).padStart(4, '0')} SP=${this.SP.toString(16)}`
+    )
+  }
+
+  /** NMI de VBlank (vetor $FFFA/$FFFB). */
+  nmi(): void {
+    // Empilha PC (hi, lo) e status (com B=0 e U=1)
+    this.push((this.PC >> 8) & 0xff)
+    this.push(this.PC & 0xff)
+    const p = (this.P & ~Flags6502.Break) | Flags6502.Unused
+    this.push(p)
+    // Inibe IRQ
+    this.setFlag(Flags6502.InterruptDisable, true)
+    // Lê vetor NMI
+    const lo = this.memory.read(0xfffa)
+    const hi = this.memory.read(0xfffb)
+    this.PC = (hi << 8) | lo
+    console.log(`[CPU] NMI → PC=$${this.PC.toString(16).padStart(4, '0')}`)
+  }
+
+  /** IRQ (vetor $FFFE/$FFFF). Ignorado se I=1. */
+  irq(): void {
+    if (this.getFlag(Flags6502.InterruptDisable)) return
+    // Empilha PC e status (B=0, U=1), seta I
+    this.push((this.PC >> 8) & 0xff)
+    this.push(this.PC & 0xff)
+    const p = (this.P & ~Flags6502.Break) | Flags6502.Unused
+    this.push(p)
+    this.setFlag(Flags6502.InterruptDisable, true)
+
+    const lo = this.memory.read(0xfffe)
+    const hi = this.memory.read(0xffff)
+    this.PC = (hi << 8) | lo
+
+    console.log(`[CPU] IRQ → PC=$${this.PC.toString(16).padStart(4, '0')}`)
   }
 
   getFlag(flag: Flags6502): boolean {
@@ -46,7 +82,9 @@ export class Cpu6502 {
 
   step(): void {
     const opcode = this.memory.read(this.PC)
-    console.log(`[CPU] Executando PC=$${this.PC.toString(16).padStart(4, '0')} opcode=${opcode.toString(16)}`)
+    console.log(
+      `[CPU] Executando PC=$${this.PC.toString(16).padStart(4, '0')} opcode=${opcode.toString(16)}`
+    )
     this.PC++
 
     switch (opcode) {
@@ -170,7 +208,9 @@ export class Cpu6502 {
         const value = this.memory.read(addr)
         this.A ^= value
         this.updateZeroAndNegativeFlags(this.A)
-        console.log(`[CPU] EOR $${addr.toString(16).padStart(2, '0')} → A ^= ${value.toString(16)} = ${this.A.toString(16)}`)
+        console.log(
+          `[CPU] EOR $${addr.toString(16).padStart(2, '0')} → A ^= ${value.toString(16)} = ${this.A.toString(16)}`
+        )
         break
       }
 
@@ -212,7 +252,11 @@ export class Cpu6502 {
         const value = this.memory.read(addr)
         this.A |= value
         this.updateZeroAndNegativeFlags(this.A)
-        console.log(`[CPU] ORA ($${zp.toString(16).padStart(2, '0')},X) → [${addr.toString(16).padStart(4, '0')}] = ${value.toString(16)}, A=${this.A.toString(16)}`)
+        console.log(
+          `[CPU] ORA ($${zp.toString(16).padStart(2, '0')},X) → [${addr
+            .toString(16)
+            .padStart(4, '0')}] = ${value.toString(16)}, A=${this.A.toString(16)}`
+        )
         break
       }
 
@@ -225,7 +269,11 @@ export class Cpu6502 {
         const value = this.memory.read(addr)
         this.A |= value
         this.updateZeroAndNegativeFlags(this.A)
-        console.log(`[CPU] ORA ($${zp.toString(16).padStart(2, '0')}),Y → base=${base.toString(16)}, addr=${addr.toString(16)}, A=${this.A.toString(16)}`)
+        console.log(
+          `[CPU] ORA ($${zp.toString(16).padStart(2, '0')}),Y → base=${base.toString(
+            16
+          )}, addr=${addr.toString(16)}, A=${this.A.toString(16)}`
+        )
         break
       }
 
@@ -235,7 +283,11 @@ export class Cpu6502 {
         const value = this.memory.read(addr)
         this.A |= value
         this.updateZeroAndNegativeFlags(this.A)
-        console.log(`[CPU] ORA $${zp.toString(16).padStart(2, '0')},X → [${addr.toString(16).padStart(2, '0')}] = ${value.toString(16)}, A=${this.A.toString(16)}`)
+        console.log(
+          `[CPU] ORA $${zp.toString(16).padStart(2, '0')},X → [${addr
+            .toString(16)
+            .padStart(2, '0')}] = ${value.toString(16)}, A=${this.A.toString(16)}`
+        )
         break
       }
 
@@ -247,7 +299,11 @@ export class Cpu6502 {
         const value = this.memory.read(addr)
         this.A |= value
         this.updateZeroAndNegativeFlags(this.A)
-        console.log(`[CPU] ORA $${base.toString(16).padStart(4, '0')},Y → [${addr.toString(16).padStart(4, '0')}] = ${value.toString(16)}, A=${this.A.toString(16)}`)
+        console.log(
+          `[CPU] ORA $${base.toString(16).padStart(4, '0')},Y → [${addr
+            .toString(16)
+            .padStart(4, '0')}] = ${value.toString(16)}, A=${this.A.toString(16)}`
+        )
         break
       }
 
@@ -259,7 +315,11 @@ export class Cpu6502 {
         const value = this.memory.read(addr)
         this.A |= value
         this.updateZeroAndNegativeFlags(this.A)
-        console.log(`[CPU] ORA $${base.toString(16).padStart(4, '0')},X → [${addr.toString(16).padStart(4, '0')}] = ${value.toString(16)}, A=${this.A.toString(16)}`)
+        console.log(
+          `[CPU] ORA $${base.toString(16).padStart(4, '0')},X → [${addr
+            .toString(16)
+            .padStart(4, '0')}] = ${value.toString(16)}, A=${this.A.toString(16)}`
+        )
         break
       }
 
@@ -289,7 +349,11 @@ export class Cpu6502 {
         this.setFlag(Flags6502.Carry, (value & 0x80) !== 0)
         this.A |= shifted
         this.updateZeroAndNegativeFlags(this.A)
-        console.log(`[CPU] SLO $${addr.toString(16).padStart(2, '0')} → (${value.toString(16)} << 1 = ${shifted.toString(16)}), A |= ${shifted.toString(16)} = ${this.A.toString(16)}`)
+        console.log(
+          `[CPU] SLO $${addr.toString(16).padStart(2, '0')} → (${value.toString(16)} << 1 = ${shifted.toString(
+            16
+          )}), A |= ${shifted.toString(16)} = ${this.A.toString(16)}`
+        )
         break
       }
 
@@ -303,7 +367,11 @@ export class Cpu6502 {
         this.memory.write(addr, shifted)
         this.A |= shifted
         this.updateZeroAndNegativeFlags(this.A)
-        console.log(`[CPU] SLO $${addr.toString(16).padStart(4, '0')} → (${value.toString(16)} << 1 = ${shifted.toString(16)}), A |= ${shifted.toString(16)} = ${this.A.toString(16)}`)
+        console.log(
+          `[CPU] SLO $${addr.toString(16).padStart(4, '0')} → (${value.toString(16)} << 1 = ${shifted.toString(
+            16
+          )}), A |= ${shifted.toString(16)} = ${this.A.toString(16)}`
+        )
         break
       }
 
@@ -321,14 +389,27 @@ export class Cpu6502 {
 
         this.A |= shifted
         this.updateZeroAndNegativeFlags(this.A)
-        console.log(`[CPU] SLO ($${zp.toString(16).padStart(2, '0')},X) → [${addr.toString(16).padStart(4, '0')}] (${value.toString(16)}<<1=${shifted.toString(16)}), A=${this.A.toString(16)}`)
+        console.log(
+          `[CPU] SLO ($${zp.toString(16).padStart(2, '0')},X) → [${addr
+            .toString(16)
+            .padStart(4, '0')}] (${value.toString(16)}<<1=${shifted.toString(16)}), A=${this.A.toString(16)}`
+        )
         break
       }
 
       // ================= JAM/KIL (não-oficiais, travam a CPU) =================
-      case 0x02: case 0x12: case 0x22: case 0x32:
-      case 0x42: case 0x52: case 0x62: case 0x72:
-      case 0x92: case 0xB2: case 0xD2: case 0xF2: {
+      case 0x02:
+      case 0x12:
+      case 0x22:
+      case 0x32:
+      case 0x42:
+      case 0x52:
+      case 0x62:
+      case 0x72:
+      case 0x92:
+      case 0xB2:
+      case 0xD2:
+      case 0xF2: {
         this.jam(opcode)
       }
 
