@@ -24,9 +24,6 @@ export class Ppu {
   // Buffer de leitura “atrasada” para PPUDATA (VRAM read buffer)
   private vramBuffer = 0;
 
-  // Latch para PPUSCROLL/PPUADDR: alterna entre primeira e segunda escrita
-  private writeToggle = false;
-
   // Sinalização auxiliar para emular uma borda A12 por scanline (MMC3)
   private a12EdgeDoneThisScanline = false;
 
@@ -45,15 +42,16 @@ export class Ppu {
 
     switch (reg) {
       case 0x2002: { // PPUSTATUS
-        // Leitura retorna o status atual; limpa VBlank e o latch (writeToggle)
+        // Leitura retorna o status atual; limpa VBlank e o latch (w)
         const status = this.registers.ppustatus;
         // Clear VBlank (bit 7)
         this.registers.ppustatus &= 0x7F;
         // A leitura do status zera o latch de escrita ($2005/$2006)
-        this.writeToggle = false;
+        this.registers.w = false;
         // Ler PPUSTATUS também limpa o flag nmiOccurred (sinal consumido)
         this.registers.nmiOccurred = false;
-        return status & 0xE0; // Geralmente somente bits 7..5 são significativos na leitura
+        // Bits 7..5 costumam ser os significativos numa leitura real
+        return status & 0xE0;
       }
 
       case 0x2004: { // OAMDATA
@@ -79,6 +77,9 @@ export class Ppu {
         this.registers.ppuctrl = value;
         // Bit 7: NMI enable em VBlank
         this.registers.nmiEnabled = (value & 0x80) !== 0;
+        // Bits 0–1: base nametable → escrevem em t (loopy)
+        // t: ....AB........ = value & 0x03
+        this.registers.t = (this.registers.t & ~0x0C00) | ((value & 0x03) << 10);
         break;
       }
 
@@ -98,29 +99,45 @@ export class Ppu {
         break;
       }
 
-      case 0x2005: { // PPUSCROLL
-        // Mantemos o comportamento atual (primeira/segunda escrita), mesmo que não seja loopy completo ainda.
-        if (!this.writeToggle) {
-          // 1ª write: X scroll (low)
+      case 0x2005: { // PPUSCROLL (loopy: primeira e segunda escrita com w)
+        // Mantemos ppuscroll apenas como legado/depuração visual
+        if (!this.registers.w) {
+          // 1ª write: X scroll fino e coarse X
+          // x = value & 7
+          // t: .....XXXXX = value >> 3
+          this.registers.x = value & 0x07;
+          this.registers.t = (this.registers.t & ~0x001F) | ((value >> 3) & 0x1F);
           this.registers.ppuscroll = (this.registers.ppuscroll & 0xFF00) | value;
         } else {
-          // 2ª write: Y scroll (high)
+          // 2ª write: fine Y e coarse Y
+          // t: ...YYYYY..... = (value >> 3) & 0x1F
+          // t: yyy.......... = value & 0x07 (fine Y)
+          const coarseY = (value >> 3) & 0x1F;
+          const fineY   = (value & 0x07);
+          this.registers.t =
+            (this.registers.t & ~0x73E0) | // 0b0111_0011_1110_0000
+            ((coarseY & 0x1F) << 5) |
+            ((fineY & 0x07) << 12);
           this.registers.ppuscroll = (this.registers.ppuscroll & 0x00FF) | (value << 8);
         }
-        this.writeToggle = !this.writeToggle;
+        this.registers.w = !this.registers.w;
         break;
       }
 
-      case 0x2006: { // PPUADDR
-        // Mantemos seu padrão anterior (low depois high), apesar do comportamento real ser high→low.
-        if (!this.writeToggle) {
-          // 1ª write: low
-          this.registers.ppuaddr = (this.registers.ppuaddr & 0xFF00) | value;
-        } else {
-          // 2ª write: high
+      case 0x2006: { // PPUADDR (loopy: ordem correta é high → low)
+        if (!this.registers.w) {
+          // 1ª write (high): t: .HHHHHH........ = value & 0x3F (bit 14 força 0)
+          this.registers.t = (this.registers.t & 0x00FF) | ((value & 0x3F) << 8);
+          // zera bit 14 (garante 15 bits)
+          this.registers.t &= 0x7FFF;
           this.registers.ppuaddr = (this.registers.ppuaddr & 0x00FF) | (value << 8);
+        } else {
+          // 2ª write (low): t: ........LLLLLLLL = value; v = t
+          this.registers.t = (this.registers.t & 0x7F00) | value;
+          this.registers.v = this.registers.t & 0x7FFF;
+          this.registers.ppuaddr = (this.registers.ppuaddr & 0xFF00) | value;
         }
-        this.writeToggle = !this.writeToggle;
+        this.registers.w = !this.registers.w;
         break;
       }
 
@@ -185,33 +202,34 @@ export class Ppu {
   }
 
   private readPpuData(): number {
-    const addr = this.registers.ppuaddr & 0x3FFF;
+    const vAddr = this.registers.v & 0x3FFF;
     let value = 0;
 
-    if (addr < 0x3F00) {
+    if (vAddr < 0x3F00) {
       // Leitura bufferizada (lê o buffer anterior; busca novo da VRAM/CHR)
       value = this.vramBuffer;
-      this.vramBuffer = this.readPpuMemory(addr);
+      this.vramBuffer = this.readPpuMemory(vAddr);
     } else {
       // Leitura de palette não é bufferizada
-      value = this.readPpuMemory(addr);
+      value = this.readPpuMemory(vAddr);
       // Mantemos o buffer com o dado do mesmo endereço “espelhado” como muitos emus fazem
-      this.vramBuffer = this.readPpuMemory((addr - 0x1000) & 0x3FFF);
+      this.vramBuffer = this.readPpuMemory((vAddr - 0x1000) & 0x3FFF);
     }
 
-    // Incremento de endereço: bit 2 de PPUCTRL → +32 (vertical) senão +1
-    const increment = (this.registers.ppuctrl & 0x04) ? 32 : 1;
-    this.registers.ppuaddr = (this.registers.ppuaddr + increment) & 0xFFFF;
-
+    this.incrementV();
     return value;
   }
 
   private writePpuData(value: number): void {
-    const addr = this.registers.ppuaddr & 0x3FFF;
-    this.writePpuMemory(addr, value);
+    const vAddr = this.registers.v & 0x3FFF;
+    this.writePpuMemory(vAddr, value);
+    this.incrementV();
+  }
 
-    const increment = (this.registers.ppuctrl & 0x04) ? 32 : 1;
-    this.registers.ppuaddr = (this.registers.ppuaddr + increment) & 0xFFFF;
+  /** Incrementa v após acesso a PPUDATA: +1 (horizontal) ou +32 (vertical) de acordo com PPUCTRL bit 2. */
+  private incrementV(): void {
+    const add = (this.registers.ppuctrl & 0x04) ? 32 : 1;
+    this.registers.v = (this.registers.v + add) & 0x7FFF;
   }
 
   // ===================== Mirroring de nametables (CIRAM) =====================
@@ -258,6 +276,57 @@ export class Ppu {
     // (No array palettes, usamos índices 0..31; cores reais ficam a cargo do Renderer)
   }
 
+  // ===================== Helpers do loopy (incrementos e cópias) =====================
+
+  /** Incrementa coarse X em v (com wrap e toggle de nametable horizontal). */
+  private incrementCoarseX(): void {
+    if ((this.registers.v & 0x001F) === 31) {
+      // coarse X = 0, troca NT horizontal
+      this.registers.v &= ~0x001F;
+      this.registers.v ^= 0x0400;
+    } else {
+      this.registers.v += 1;
+    }
+    this.registers.v &= 0x7FFF;
+  }
+
+  /** Incrementa fine Y/coarse Y em v com regras 29/31 e troca de nametable vertical. */
+  private incrementY(): void {
+    let v = this.registers.v;
+
+    if ((v & 0x7000) !== 0x7000) {
+      // ainda dentro de fine Y (0..6) → ++fine Y
+      v += 0x1000;
+    } else {
+      // fine Y vai de 7 para 0
+      v &= ~0x7000;
+      let coarseY = (v & 0x03E0) >> 5;
+      if (coarseY === 29) {
+        coarseY = 0;
+        // troca NT vertical
+        v ^= 0x0800;
+      } else if (coarseY === 31) {
+        // 31 → wrap para 0 (sem trocar NT)
+        coarseY = 0;
+      } else {
+        coarseY += 1;
+      }
+      v = (v & ~0x03E0) | ((coarseY & 0x1F) << 5);
+    }
+
+    this.registers.v = v & 0x7FFF;
+  }
+
+  /** Copia coarse X e NT horizontal de t → v (no começo de cada scanline visível). */
+  private copyHorizontalBits(): void {
+    this.registers.v = (this.registers.v & ~0x041F) | (this.registers.t & 0x041F);
+  }
+
+  /** Copia fine Y, coarse Y e NT vertical de t → v (no início da pre-render). */
+  private copyVerticalBits(): void {
+    this.registers.v = (this.registers.v & ~0x7BE0) | (this.registers.t & 0x7BE0);
+  }
+
   // ===================== Temporização / VBlank / NMI =====================
 
   /**
@@ -265,6 +334,10 @@ export class Ppu {
    * Neste estágio, simulamos a janela de VBlank e a geração de NMI.
    * Além disso, sintetizamos **uma borda A12 por scanline visível** quando o BG está ligado,
    * para clockar o IRQ do MMC3 (Mapper 4) com timing de scanline.
+   *
+   * Também aplicamos as cópias loopy simplificadas:
+   *  - No início da pre-render (scanline -1): copia vertical (t→v: fineY/coarseY/NTv)
+   *  - No início de cada scanline visível: copia horizontal (t→v: coarseX/NTh)
    */
   step(): void {
     this.cycle++;
@@ -275,17 +348,14 @@ export class Ppu {
       const bgOn = (this.registers.ppumask & 0x08) !== 0;
       if (bgOn && !this.a12EdgeDoneThisScanline) {
         // Síntese mínima compatível com filtro do Mapper4:
-        // - várias leituras com A12=0 (< $1000) para acumular "low streak" e gastar cooldown
+        // - várias leituras com A12=0 (< $1000) para acumular "low streak" e reduzir cooldown interno
         // - uma leitura com A12=1 (>= $1000) para gerar a borda 0→1
         const m = this.mapper();
         if (m) {
-          // 16 leituras em faixa baixa garantem lowStreak>=8 e reduzem cooldown interno
           for (let i = 0; i < 16; i++) {
-            // endereços variados abaixo de $1000 (pattern 0)
             const lowAddr = 0x0000 + ((i * 2) & 0x0FFE);
             m.ppuRead(lowAddr & 0x1FFF);
           }
-          // Agora uma leitura no topo (pattern 1) com A12=1
           m.ppuRead(0x1000);
           this.a12EdgeDoneThisScanline = true;
         }
@@ -309,7 +379,10 @@ export class Ppu {
         }
       }
 
-      // Pre-render (scanline -1 → representado aqui ao fechar 261 e voltar pra -1)
+      // Ao entrar numa nova scanline (qualquer), reseta a flag de A12 da scanline
+      this.a12EdgeDoneThisScanline = false;
+
+      // Pre-render termina em 260 e volta pra -1; quando chegamos em 261 → volta pra -1
       if (this.scanline >= 261) {
         this.scanline = -1;
         // Limpa VBlank
@@ -317,9 +390,16 @@ export class Ppu {
         // sprite 0 hit e overflow (não implementados ainda) também seriam limpos aqui
       }
 
-      // Ao entrar numa nova scanline (qualquer), reseta a flag de A12 da scanline
-      // Observação: quando scanline vira -1 (pre-render), também precisamos limpar.
-      this.a12EdgeDoneThisScanline = false;
+      // Cópias loopy simplificadas no início de linhas:
+      const bgOn = (this.registers.ppumask & 0x08) !== 0;
+
+      if (this.scanline === -1) {
+        // Início da pre-render: copiar vertical (t→v)
+        if (bgOn) this.copyVerticalBits();
+      } else if (this.scanline >= 0 && this.scanline <= 239) {
+        // Início de cada scanline visível: copiar horizontal (t→v)
+        if (bgOn) this.copyHorizontalBits();
+      }
     }
   }
 
@@ -338,16 +418,25 @@ export class Ppu {
     this.cycle = 0;
     this.scanline = 0;
     this.vramBuffer = 0;
-    this.writeToggle = false;
     this.a12EdgeDoneThisScanline = false;
 
+    // Registradores
     this.registers.ppuctrl = 0;
     this.registers.ppumask = 0;
     this.registers.ppustatus = 0;
     this.registers.oamaddr = 0;
+
+    // Legado/depuração (não usados pelo loopy real)
     this.registers.ppuscroll = 0;
     this.registers.ppuaddr = 0;
     this.registers.ppudata = 0;
+
+    // Loopy state
+    this.registers.v = 0;
+    this.registers.t = 0;
+    this.registers.x = 0;
+    this.registers.w = false;
+
     this.registers.nmiOccurred = false;
     this.registers.nmiEnabled = false;
 
