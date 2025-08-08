@@ -27,6 +27,9 @@ export class Ppu {
   // Latch para PPUSCROLL/PPUADDR: alterna entre primeira e segunda escrita
   private writeToggle = false;
 
+  // Sinalização auxiliar para emular uma borda A12 por scanline (MMC3)
+  private a12EdgeDoneThisScanline = false;
+
   constructor(private memory: Memory) {}
 
   // Mapper atual (cartucho)
@@ -131,7 +134,7 @@ export class Ppu {
   // ===================== Acesso ao espaço PPU 0x0000–0x3FFF (VRAM space) =====================
 
   /**
-   * Le o espaço da PPU:
+   * Lê o espaço da PPU:
    * - 0x0000–0x1FFF: CHR (pattern tables) → via mapper
    * - 0x2000–0x2FFF: nametables → via CIRAM com mirroring
    * - 0x3F00–0x3F1F: palette RAM (espelhos em 0x3F20–0x3FFF)
@@ -259,12 +262,40 @@ export class Ppu {
 
   /**
    * Avança um “ciclo” da PPU (3× para cada ciclo da CPU).
-   * Neste estágio, simulamos apenas a janela de VBlank e a geração de NMI.
+   * Neste estágio, simulamos a janela de VBlank e a geração de NMI.
+   * Além disso, sintetizamos **uma borda A12 por scanline visível** quando o BG está ligado,
+   * para clockar o IRQ do MMC3 (Mapper 4) com timing de scanline.
    */
   step(): void {
     this.cycle++;
+
+    // Durante scanlines visíveis (0..239), sintetizar uma borda A12
+    if (this.scanline >= 0 && this.scanline <= 239) {
+      // bit 3 do PPUMASK: show background
+      const bgOn = (this.registers.ppumask & 0x08) !== 0;
+      if (bgOn && !this.a12EdgeDoneThisScanline) {
+        // Síntese mínima compatível com filtro do Mapper4:
+        // - várias leituras com A12=0 (< $1000) para acumular "low streak" e gastar cooldown
+        // - uma leitura com A12=1 (>= $1000) para gerar a borda 0→1
+        const m = this.mapper();
+        if (m) {
+          // 16 leituras em faixa baixa garantem lowStreak>=8 e reduzem cooldown interno
+          for (let i = 0; i < 16; i++) {
+            // endereços variados abaixo de $1000 (pattern 0)
+            const lowAddr = 0x0000 + ((i * 2) & 0x0FFE);
+            m.ppuRead(lowAddr & 0x1FFF);
+          }
+          // Agora uma leitura no topo (pattern 1) com A12=1
+          m.ppuRead(0x1000);
+          this.a12EdgeDoneThisScanline = true;
+        }
+      }
+    }
+
     if (this.cycle >= 341) {
       this.cycle = 0;
+
+      // Avança scanline
       this.scanline++;
 
       // Início do VBlank (scanline 241)
@@ -285,6 +316,10 @@ export class Ppu {
         this.registers.ppustatus &= ~0x80;
         // sprite 0 hit e overflow (não implementados ainda) também seriam limpos aqui
       }
+
+      // Ao entrar numa nova scanline (qualquer), reseta a flag de A12 da scanline
+      // Observação: quando scanline vira -1 (pre-render), também precisamos limpar.
+      this.a12EdgeDoneThisScanline = false;
     }
   }
 
@@ -304,6 +339,7 @@ export class Ppu {
     this.scanline = 0;
     this.vramBuffer = 0;
     this.writeToggle = false;
+    this.a12EdgeDoneThisScanline = false;
 
     this.registers.ppuctrl = 0;
     this.registers.ppumask = 0;

@@ -206,6 +206,9 @@ function ppuStepMany(steps: number) {
       cpu.nmi();
       ppu.clearNmi();
     }
+
+    // IRQ do Mapper4 (MMC3) — checar após cada passo da PPU para reduzir latência
+    serviceMapperIrq();
   }
 }
 
@@ -225,7 +228,6 @@ function stepExecution() {
   try {
     cpu.step(); // executa uma instrução (sem contagem de ciclos)
     ppuStepMany(PPU_STEPS_PER_CPU_STEP * 4); // avança a PPU um pouco para “andar” o quadro
-    serviceMapperIrq(); // verifica IRQ do MMC3
     renderFrame();
     updateUI();
     showMessage('Step executado.', 'info');
@@ -252,7 +254,7 @@ function startRunning() {
       for (let i = 0; i < budget; i++) {
         cpu.step();
         ppuStepMany(PPU_STEPS_PER_CPU_STEP);
-        serviceMapperIrq(); // checa a cada micro passo p/ timing melhor
+        // serviceMapperIrq é chamado dentro de ppuStepMany a cada passo da PPU
       }
 
       renderFrame();

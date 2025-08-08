@@ -3,14 +3,14 @@ import type { Mapper } from './Mapper';
 import { Mirroring } from './Mirroring';
 
 /**
- * Mapper 4 (MMC3) — implementação mínima viável:
+ * Mapper 4 (MMC3) — implementação mínima viável e estável:
  * - $8000 (even): bank select (bits 0-2 reg alvo; bit6 PRG mode; bit7 CHR mode)
  * - $8001 (odd) : bank data (R0..R7)
  * - $A000 (even): mirroring (0=Horizontal, 1=Vertical)
  * - $A001 (odd) : PRG-RAM protect (bit7 enable, bit6 write-protect)
  * - $C000 (even): IRQ latch
- * - $C001 (odd) : IRQ reload (clear agora; recarrega no próximo A12↑)
- * - $E000 (even): IRQ disable + acknowledge
+ * - $C001 (odd) : IRQ reload (recarrega na próxima A12↑)
+ * - $E000 (even): IRQ disable + acknowledge (limpa pending)
  * - $E001 (odd) : IRQ enable
  *
  * PRG map (8KB):
@@ -35,13 +35,13 @@ export class Mapper4 implements Mapper {
   private mirroring: Mirroring;
 
   // Bank regs
-  private bankSelect = 0;            // $8000
+  private bankSelect = 0;               // $8000
   private bankRegs = new Uint8Array(8); // R0..R7 ($8001)
-  private prgMode = 0;               // $8000 bit6
-  private chrMode = 0;               // $8000 bit7
+  private prgMode = 0;                  // $8000 bit6
+  private chrMode = 0;                  // $8000 bit7
 
-  private prgBankCount: number;      // em 8KB
-  private chrBankCount1k: number;    // em 1KB
+  private prgBankCount: number;         // em 8KB
+  private chrBankCount1k: number;       // em 1KB
   private prgFixedLast: number;
   private prgFixedSecondLast: number;
 
@@ -55,9 +55,10 @@ export class Mapper4 implements Mapper {
   private irqEnabled = false;
   private irqPending = false;
 
-  // Filtro simples de A12
+  // Filtro de A12
   private lastA12 = 0;
   private a12LowStreak = 0;
+  private a12Cooldown = 0; // “debounce” simples de borda
 
   constructor(prgRom: Uint8Array, chrRom: Uint8Array, mirroring: Mirroring) {
     this.prgRom = prgRom;
@@ -65,8 +66,8 @@ export class Mapper4 implements Mapper {
     this.chr = this.chrIsRam ? new Uint8Array(8 * 1024) : chrRom;
     this.mirroring = mirroring;
 
-    this.prgBankCount = this.prgRom.length >> 13;       // / 0x2000
-    this.chrBankCount1k = this.chr.length >> 10;        // / 0x400
+    this.prgBankCount = this.prgRom.length >> 13; // / 0x2000 (8KB)
+    this.chrBankCount1k = this.chr.length >> 10;  // / 0x400 (1KB)
     this.prgFixedLast = Math.max(0, this.prgBankCount - 1);
     this.prgFixedSecondLast = Math.max(0, this.prgBankCount - 2);
   }
@@ -84,18 +85,26 @@ export class Mapper4 implements Mapper {
     this.prgMode = 0;
     this.chrMode = 0;
 
+    // IRQ
     this.irqLatch = 0;
     this.irqCounter = 0;
     this.irqReload = false;
     this.irqEnabled = false;
     this.irqPending = false;
 
+    // A12 filtro
     this.lastA12 = 0;
     this.a12LowStreak = 0;
+    this.a12Cooldown = 0;
 
-    // valores razoáveis de arranque
-    this.bankRegs[6] = 0 % this.prgBankCount;
-    this.bankRegs[7] = 1 % this.prgBankCount;
+    // Estado inicial mais compatível: R6=second-last, R7=last (se existirem)
+    if (this.prgBankCount > 0) {
+      this.bankRegs[6] = (this.prgBankCount > 1 ? this.prgBankCount - 2 : 0) % Math.max(1, this.prgBankCount);
+      this.bankRegs[7] = (this.prgBankCount > 1 ? this.prgBankCount - 1 : 0) % Math.max(1, this.prgBankCount);
+    } else {
+      this.bankRegs[6] = 0;
+      this.bankRegs[7] = 0;
+    }
 
     this.recomputePrgMap();
     this.recomputeChrMap();
@@ -107,11 +116,12 @@ export class Mapper4 implements Mapper {
     addr &= 0xffff;
 
     if (addr >= 0x6000 && addr <= 0x7fff) {
-      if (!this.prgRamEnable) return 0; // "open bus" simplificado
+      if (!this.prgRamEnable) return 0; // open bus simplificado
       return this.prgRam[addr - 0x6000];
     }
 
     if (addr >= 0x8000) {
+      if (this.prgBankCount === 0) return 0;
       const window = (addr - 0x8000) >> 13; // 8KB janela 0..3
       const bank = this.prgMap[window] % this.prgBankCount;
       const offset = (bank << 13) | (addr & 0x1fff);
@@ -141,11 +151,18 @@ export class Mapper4 implements Mapper {
         this.recomputeChrMap();
       } else {
         // $8001 odd: bank data
-        this.bankRegs[this.bankSelect] = value;
+        this.bankRegs[this.bankSelect] = value & 0xFF;
+
+        // Normalização de PRG em R6/R7 (evitar overflow)
         if (this.bankSelect === 6 || this.bankSelect === 7) {
-          this.bankRegs[this.bankSelect] %= this.prgBankCount; // 6 bits efetivos
+          if (this.prgBankCount > 0) {
+            this.bankRegs[this.bankSelect] %= this.prgBankCount;
+          } else {
+            this.bankRegs[this.bankSelect] = 0;
+          }
           this.recomputePrgMap();
         } else {
+          // CHR mapeado em blocos de 1KB (R0/R1 precisam ser alinhados a 2KB)
           this.recomputeChrMap();
         }
       }
@@ -173,6 +190,7 @@ export class Mapper4 implements Mapper {
       } else {
         // $C001 odd: IRQ reload na próxima borda A12↑
         this.irqReload = true;
+        // Alguns docs citam zerar o counter aqui; manter 0 ajuda a “forçar” reload no próximo clock
         this.irqCounter = 0;
       }
       return;
@@ -181,9 +199,9 @@ export class Mapper4 implements Mapper {
     // $E000-$FFFF: IRQ disable/enable
     if (addr >= 0xE000) {
       if ((addr & 1) === 0) {
-        // $E000 even: disable + ack
+        // $E000 even: disable + acknowledge
         this.irqEnabled = false;
-        this.irqPending = false;
+        this.irqPending = false; // ACK somente aqui
       } else {
         // $E001 odd: enable
         this.irqEnabled = true;
@@ -197,6 +215,7 @@ export class Mapper4 implements Mapper {
     addr &= 0x3fff;
     if (addr < 0x2000) {
       this.trackA12(addr);
+      if (this.chrBankCount1k === 0) return 0;
       const bank1k = (addr >> 10) & 7;
       const bank = this.chrMap1k[bank1k] % this.chrBankCount1k;
       const offset = (bank << 10) | (addr & 0x3ff);
@@ -209,18 +228,23 @@ export class Mapper4 implements Mapper {
     addr &= 0x3fff; value &= 0xff;
     if (addr < 0x2000) {
       this.trackA12(addr);
-      if (this.chrIsRam) {
-        const bank1k = (addr >> 10) & 7;
-        const bank = this.chrMap1k[bank1k] % this.chrBankCount1k;
-        const offset = (bank << 10) | (addr & 0x3ff);
-        this.chr[offset] = value;
-      }
+      if (!this.chrIsRam) return; // CHR-ROM: ignora
+      if (this.chrBankCount1k === 0) return;
+      const bank1k = (addr >> 10) & 7;
+      const bank = this.chrMap1k[bank1k] % this.chrBankCount1k;
+      const offset = (bank << 10) | (addr & 0x3ff);
+      this.chr[offset] = value;
     }
   }
 
   // ===================== Helpers =====================
 
   private recomputePrgMap(): void {
+    if (this.prgBankCount === 0) {
+      this.prgMap.fill(0);
+      return;
+    }
+
     const r6 = this.bankRegs[6] % this.prgBankCount;
     const r7 = this.bankRegs[7] % this.prgBankCount;
 
@@ -240,11 +264,17 @@ export class Mapper4 implements Mapper {
   }
 
   private recomputeChrMap(): void {
+    if (this.chrBankCount1k === 0) {
+      this.chrMap1k.fill(0);
+      return;
+    }
+
     const r = this.bankRegs;
 
     if (this.chrMode === 0) {
-      const r0 = (r[0] & 0xfe) % this.chrBankCount1k;
-      const r1 = (r[1] & 0xfe) % this.chrBankCount1k;
+      // R0/R1 são 2KB alinhados (mask & 0xFE)
+      const r0 = (r[0] & 0xFE) % this.chrBankCount1k;
+      const r1 = (r[1] & 0xFE) % this.chrBankCount1k;
       this.chrMap1k[0] = r0;
       this.chrMap1k[1] = (r0 + 1) % this.chrBankCount1k;
       this.chrMap1k[2] = r1;
@@ -254,8 +284,8 @@ export class Mapper4 implements Mapper {
       this.chrMap1k[6] = r[4] % this.chrBankCount1k;
       this.chrMap1k[7] = r[5] % this.chrBankCount1k;
     } else {
-      const r0 = (r[0] & 0xfe) % this.chrBankCount1k;
-      const r1 = (r[1] & 0xfe) % this.chrBankCount1k;
+      const r0 = (r[0] & 0xFE) % this.chrBankCount1k;
+      const r1 = (r[1] & 0xFE) % this.chrBankCount1k;
       this.chrMap1k[0] = r[2] % this.chrBankCount1k;
       this.chrMap1k[1] = r[3] % this.chrBankCount1k;
       this.chrMap1k[2] = r[4] % this.chrBankCount1k;
@@ -270,34 +300,46 @@ export class Mapper4 implements Mapper {
   /** Filtro simples de A12 para clockar o contador de IRQ (borda 0→1). */
   private trackA12(addr: number): void {
     const a12 = (addr & 0x1000) ? 1 : 0;
+
+    if (this.a12Cooldown > 0) this.a12Cooldown--;
+
     if (a12 === 0) this.a12LowStreak++;
+
     if (this.lastA12 === 0 && a12 === 1) {
-      // clock apenas se A12 ficou baixo "por um tempo" (≈8 acessos)
-      if (this.a12LowStreak >= 8) this.clockIrqCounter();
+      // clock apenas se A12 ficou baixo "por um tempo" e sem cooldown
+      if (this.a12LowStreak >= 8 && this.a12Cooldown === 0) {
+        this.clockIrqCounter();
+        this.a12Cooldown = 8; // debounce simples
+      }
       this.a12LowStreak = 0;
     }
+
     this.lastA12 = a12;
   }
 
+  /** Contador de IRQ seguindo a ordem canônica. */
   private clockIrqCounter(): void {
+    let justReloaded = false;
+
     if (this.irqReload || this.irqCounter === 0) {
-      this.irqCounter = this.irqLatch;
+      this.irqCounter = this.irqLatch & 0xFF;
       this.irqReload = false;
+      justReloaded = true;
     } else {
-      this.irqCounter = (this.irqCounter - 1) & 0xff;
+      this.irqCounter = (this.irqCounter - 1) & 0xFF;
     }
-    // estilo "normal": IRQ quando counter == 0
+
+    // Dispara IRQ quando o contador chega a 0 por contagem,
+    // ou imediatamente após reload somente se latch==0 (refinamento comum).
     if (this.irqEnabled && this.irqCounter === 0) {
-      this.irqPending = true;
+      if (!justReloaded || this.irqLatch === 0) {
+        this.irqPending = true; // nível permanece até ACK ($E000)
+      }
     }
   }
 
-  /** Driver chama após os passos de PPU para disparar IRQ na CPU. */
+  /** Driver chama após os passos de PPU para testar IRQ. Mantém “nível”, não limpa aqui. */
   public consumeIrq(): boolean {
-    if (this.irqPending) {
-      this.irqPending = false; // level→edge simplificado
-      return true;
-    }
-    return false;
+    return this.irqPending;
   }
 }
