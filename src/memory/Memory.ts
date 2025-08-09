@@ -1,142 +1,138 @@
 // src/memory/Memory.ts
-import type { Mapper } from '../mappers/Mapper';
+import { Controller, ControllerButton } from '../io/Controller';
 import { Ppu } from '../ppu/Ppu';
+import type { Mapper } from '../mappers/Mapper';
 
-/**
- * Mapa de memória da CPU do NES (visão simplificada):
- *
- * 0000-07FF: 2KB RAM interna
- * 0800-1FFF: espelhos da RAM (a cada 0x800)
- * 2000-2007: registradores da PPU
- * 2008-3FFF: espelhos dos registradores da PPU (a cada 8 bytes)
- * 4000-4017: APU e I/O (não implementado aqui; 0 nas leituras, ignora writes)
- * 4018-401F: testes do APU (normalmente não usados)
- * 4020-5FFF: expansão/cart (varia por mapper; aqui deixamos 0)
- * 6000-7FFF: PRG-RAM do cartucho (se existir; via mapper)
- * 8000-FFFF: PRG-ROM / registradores do mapper (via mapper)
- */
 export class Memory {
-  private ram = new Uint8Array(0x0800); // 2KB RAM interna
+  private ram: Uint8Array;
   private ppu: Ppu;
   private mapper: Mapper | null = null;
 
+  private controller1: Controller;
+  private controller2: Controller;
+
   constructor() {
+    this.ram = new Uint8Array(0x0800); // 2KB internal RAM
     this.ppu = new Ppu(this);
+    this.controller1 = new Controller();
+    this.controller2 = new Controller();
   }
 
-  attachMapper(mapper: Mapper): void {
+  /** Liga um mapper (depois do carregamento da ROM) */
+  attachMapper(mapper: Mapper) {
     this.mapper = mapper;
-    this.mapper.reset();
+    // NÃO chame this.ppu.setMapper(mapper); a PPU consulta via memory.getMapper()
+    // Opcional: reset do mapper ao anexar
+    this.mapper.reset?.();
   }
 
-  /** Leitura do espaço de endereços da CPU. */
-  read(addr: number): number {
-    addr &= 0xFFFF;
-
-    // 0000-1FFF: RAM com espelhamento a cada 0x800
-    if (addr < 0x2000) {
-      return this.ram[addr % 0x0800];
-    }
-
-    // 2000-3FFF: PPU regs espelhados a cada 8 bytes
-    if (addr >= 0x2000 && addr <= 0x3FFF) {
-      const reg = 0x2000 | (addr & 0x0007); // 0x2000..0x2007
-      return this.ppu.readRegister(reg);
-    }
-
-    // 4000-4017: APU/IO (stub)
-    if (addr >= 0x4000 && addr <= 0x4017) {
-      // 0 por padrão até implementarmos APU/IO
-      return 0;
-    }
-
-    // 4018-401F: testes do APU (normalmente não usados)
-    if (addr >= 0x4018 && addr <= 0x401F) {
-      return 0;
-    }
-
-    // 6000-FFFF: cartucho (PRG-RAM/PRG-ROM/regs) via mapper
-    if (this.mapper && addr >= 0x6000) {
-      return this.mapper.cpuRead(addr);
-    }
-
-    // Espaço não mapeado
-    return 0;
+  /** Retorna a PPU principal */
+  getPpu(): Ppu {
+    return this.ppu;
   }
 
-  /** Escrita no espaço de endereços da CPU. */
-  write(addr: number, value: number): void {
-    addr &= 0xFFFF;
-    value &= 0xFF;
-
-    // 0000-1FFF: RAM com espelhamento a cada 0x800
-    if (addr < 0x2000) {
-      this.ram[addr % 0x0800] = value;
-      return;
-    }
-
-    // 2000-3FFF: PPU regs espelhados a cada 8 bytes
-    if (addr >= 0x2000 && addr <= 0x3FFF) {
-      const reg = 0x2000 | (addr & 0x0007); // 0x2000..0x2007
-      this.ppu.writeRegister(reg, value);
-      return;
-    }
-
-    // 4000-4017: APU/IO (stub)
-    if (addr >= 0x4000 && addr <= 0x4017) {
-      // Ignora até implementarmos APU/IO (ex.: $4014 DMA de OAM)
-      return;
-    }
-
-    // 4018-401F: testes do APU (ignorar)
-    if (addr >= 0x4018 && addr <= 0x401F) {
-      return;
-    }
-
-    // 6000-FFFF: cartucho via mapper
-    if (this.mapper && addr >= 0x6000) {
-      this.mapper.cpuWrite(addr, value);
-      return;
-    }
-
-    // Espaço não mapeado: ignorar
-  }
-
-  // ===================== Helpers p/ testes e bootstrap =====================
-
-  /**
-   * Carrega um "programa" diretamente na PRG-ROM mapeada em 0x8000 (para testes).
-   * Observação: isso escreve via visão da CPU; útil para unit tests simples.
-   */
-  loadProgram(program: Uint8Array | number[], startAddr: number = 0x8000): void {
-    const data = program instanceof Uint8Array ? program : new Uint8Array(program);
-    for (let i = 0; i < data.length; i++) {
-      this.write(startAddr + i, data[i]);
-    }
-  }
-
-  /**
-   * Carrega bytes como se fossem a PRG em 0x8000 e ajusta o vetor de RESET.
-   * Útil em testes de CPU sem mapper.
-   */
-  loadRom(prgRom: Uint8Array, startAddr: number = 0x8000): void {
-    for (let i = 0; i < prgRom.length; i++) {
-      this.write(startAddr + i, prgRom[i]);
-    }
-    // Vetor de RESET em FFFC/FFFD (little endian)
-    this.write(0xFFFC, startAddr & 0xFF);
-    this.write(0xFFFD, (startAddr >> 8) & 0xFF);
-  }
-
-  // ===================== Exposição para PPU/Mapper =====================
-
-  /** A PPU usa para consultar o mapper (CHR/mirroring/IRQ etc.). */
+  /** Retorna o Mapper ativo */
   getMapper(): Mapper | null {
     return this.mapper;
   }
 
-  /** O main.ts precisa obter a instância da PPU. */
-  getPpu(): Ppu {
-    return this.ppu;
+  /** Controller 1 (Player 1) */
+  getController1(): Controller {
+    return this.controller1;
+  }
+
+  /** Controller 2 (Player 2) */
+  getController2(): Controller {
+    return this.controller2;
+  }
+
+  /** Leitura da memória CPU $0000-$FFFF */
+  read(addr: number): number {
+    addr &= 0xFFFF;
+
+    // RAM interna espelhada até $1FFF
+    if (addr < 0x2000) {
+      return this.ram[addr & 0x07FF];
+    }
+
+    // PPU registers espelhados $2000-$3FFF
+    if (addr < 0x4000) {
+      // Normaliza espelhos para $2000-$2007
+      const reg = 0x2000 | (addr & 0x0007);
+      return this.ppu.readRegister(reg);
+    }
+
+    // APU/IO não implementados: tratamos apenas controles e DMA
+    // Controllers
+    if (addr === 0x4016) {
+      return this.controller1.readBit();
+    }
+    if (addr === 0x4017) {
+      return this.controller2.readBit();
+    }
+
+    // Mapper / PRG ROM / cart
+    if (addr >= 0x4020 && this.mapper) {
+      return this.mapper.cpuRead(addr);
+    }
+
+    return 0;
+  }
+
+  /** Escrita na memória CPU $0000-$FFFF */
+  write(addr: number, value: number): void {
+    addr &= 0xFFFF;
+    value &= 0xFF;
+
+    // RAM interna
+    if (addr < 0x2000) {
+      this.ram[addr & 0x07FF] = value;
+      return;
+    }
+
+    // PPU registers
+    if (addr < 0x4000) {
+      const reg = 0x2000 | (addr & 0x0007);
+      this.ppu.writeRegister(reg, value);
+      return;
+    }
+
+    // OAM DMA ($4014): copia 256 bytes da página $XX00..$XXFF para a OAM
+    if (addr === 0x4014) {
+      this.ppu.oamDma(value);
+      return;
+    }
+
+    // Controller strobe ($4016)
+    if (addr === 0x4016) {
+      this.controller1.writeStrobe(value);
+      this.controller2.writeStrobe(value);
+      return;
+    }
+
+    // Mapper / PRG RAM / registradores do cart ($4020+)
+    if (addr >= 0x4020 && this.mapper) {
+      this.mapper.cpuWrite(addr, value);
+      return;
+    }
+
+    // Demais endereços (APU etc.) ainda não implementados
+  }
+
+  /** Reseta os controladores e PPU */
+  reset(): void {
+    this.ppu.reset();
+    this.controller1.reset();
+    this.controller2.reset();
+    this.ram.fill(0);
+  }
+
+  /** Helpers para simular input via código */
+  pressButtonOnController1(btn: ControllerButton | string): void {
+    this.controller1.setButton(btn as any, true);
+  }
+
+  releaseButtonOnController1(btn: ControllerButton | string): void {
+    this.controller1.setButton(btn as any, false);
   }
 }

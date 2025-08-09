@@ -385,9 +385,8 @@ export class Ppu {
       // Pre-render termina em 260 e volta pra -1; quando chegamos em 261 → volta pra -1
       if (this.scanline >= 261) {
         this.scanline = -1;
-        // Limpa VBlank
-        this.registers.ppustatus &= ~0x80;
-        // sprite 0 hit e overflow (não implementados ainda) também seriam limpos aqui
+        // Limpa VBlank e também sprite 0 hit (bit 6) e sprite overflow (bit 5)
+        this.registers.ppustatus &= ~(0x80 | 0x40 | 0x20);
       }
 
       // Cópias loopy simplificadas no início de linhas:
@@ -410,6 +409,26 @@ export class Ppu {
 
   clearNmi(): void {
     this.registers.nmiOccurred = false;
+  }
+
+  // ===================== OAM DMA ($4014) =====================
+
+  /**
+   * Copia 256 bytes da página $XX00..$XXFF da RAM/CPU para a OAM,
+   * iniciando em OAMADDR atual e fazendo wrap em 0x100.
+   * Observação: o "stall" de 513/514 ciclos deve ser aplicado na CPU; omitido aqui.
+   */
+  oamDma(page: number): void {
+    const base = (page & 0xFF) << 8;
+    let oamAddr = this.registers.oamaddr & 0xFF;
+
+    for (let i = 0; i < 256; i++) {
+      const byte = this.memory.read(base + i) & 0xFF;
+      this.oam[oamAddr] = byte;
+      oamAddr = (oamAddr + 1) & 0xFF;
+    }
+
+    this.registers.oamaddr = oamAddr;
   }
 
   // ===================== Reset =====================

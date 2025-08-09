@@ -115,7 +115,7 @@ export class Renderer {
     }
   }
 
-  // ===================== Sprites (8x8, 8x16, palettes) =====================
+  // ===================== Sprites (8x8, 8x16, palettes) + Sprite 0 hit =====================
 
   private renderSprites(ppu: Ppu): void {
     const showSprites = (ppu.registers.ppumask & 0x10) !== 0; // PPUMASK bit 4
@@ -125,6 +125,11 @@ export class Renderer {
 
     // Pattern table de sprites (apenas para 8x8; em 8x16, depende do tileIndex bit0)
     const patternBase8x8 = (ppu.registers.ppuctrl & 0x08) ? 0x1000 : 0x0000;
+
+    // Bits de clipping (leftmost 8 px)
+    const bgLeftEnabled = (ppu.registers.ppumask & 0x02) !== 0;     // bit 1
+    const sprLeftEnabled = (ppu.registers.ppumask & 0x04) !== 0;    // bit 2
+    const bgEnabled = (ppu.registers.ppumask & 0x08) !== 0;         // bit 3 (BG ON)
 
     for (let i = 0; i < 64; i++) {
       const base = i * 4;
@@ -156,7 +161,7 @@ export class Renderer {
             spriteHeight === 16
           );
 
-          // Transparência: patternBits==0 não desenha
+          // Transparência: patternBits==0 não desenha e também não conta para hit
           if ((patternBits & 0x03) === 0) continue;
 
           const screenX = spriteX + x;
@@ -165,6 +170,29 @@ export class Renderer {
 
           const dstIndex = screenY * 256 + screenX;
 
+          // ===== Sprite 0 hit =====
+          // Regras:
+          // - Precisa de BG ligado globalmente (bit 3) e sprites ligados (óbvio, estamos aqui).
+          // - BG pixel precisa ser opaco (bgMask != 0) *considerando* clipping de 8px à esquerda.
+          // - Sprite precisa ser opaco (já checado) *considerando* clipping de 8px à esquerda.
+          // - A prioridade não impede o hit (hit ocorre mesmo se o sprite estiver "atrás" do BG).
+          // - Só para o índice 0 (primeiro sprite na OAM).
+          if (i === 0 && bgEnabled) {
+            const bgOpaqueRaw = this.bgMask[dstIndex] !== 0;
+
+            // Clipping de 8px à esquerda: se X<8 e a respectiva máscara estiver desabilitada,
+            // aquele lado é tratado como transparente para fins de hit.
+            const inLeft8 = screenX < 8;
+            const bgOpaque = bgOpaqueRaw && (!inLeft8 || bgLeftEnabled);
+            const sprVisibleForHit = (!inLeft8 || sprLeftEnabled);
+
+            if (bgOpaque && sprVisibleForHit) {
+              // Seta bit 6 do PPUSTATUS (sprite 0 hit)
+              ppu.registers.ppustatus |= 0x40;
+            }
+          }
+
+          // ===== Desenho (considera prioridade BG vs sprite) =====
           // Paleta de sprite: $3F10 + paletteSel*4 + patternBits
           const palBase = 0x3F10 + (paletteSel * 4);
           const nesColorIndex = ppu.readPpuMemory(palBase + (patternBits & 0x03)) & 0x3F;

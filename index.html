@@ -6,7 +6,7 @@
     <title>NES Emulator</title>
     <style>
       :root {
-        --bg-color: #121212;
+        --bg-color: #0e0e10;
         --text-color: #f5f5f5;
         --accent-color: #ff5555;
         --debug-color: #9fd3ff;
@@ -16,16 +16,25 @@
         --border-color: #444;
         --success: #8bc34a;
         --error: #ff6b6b;
+
+        --cabinet-body: #15151a;
+        --cabinet-edge: #0a0a0d;
+        --cabinet-highlight: #2a2a33;
+        --marquee-bg: linear-gradient(90deg,#ff3d3d 0%,#ffa63d 50%,#ff3dbb 100%);
+        --speaker: #22252a;
+        --bezel: #0a0b0f;
+        --bezel-gloss: rgba(255,255,255,0.06);
       }
 
+      * { box-sizing: border-box; }
+
       body {
-        background-color: var(--bg-color);
+        background: radial-gradient(1000px 600px at 50% 0%, #16171b 0%, #0c0c0f 40%, #08080a 100%);
         color: var(--text-color);
         font-family: 'Courier New', monospace;
         display: flex;
         flex-direction: column;
         align-items: center;
-        justify-content: flex-start;
         min-height: 100vh;
         margin: 0;
         padding: 1rem;
@@ -34,19 +43,262 @@
 
       h1 {
         font-size: 2.2rem;
-        margin: 0;
+        margin: 0 0 .5rem 0;
         color: var(--accent-color);
         text-shadow: 0 0 8px rgba(255, 85, 85, 0.3);
       }
+
+      /* ====== FLIPERAMA ====== */
+
+      .cabinet {
+        position: relative;
+        width: clamp(320px, 70vw, 820px);
+        /* proporção aproximada de gabinete */
+        aspect-ratio: 5 / 7;
+        display: grid;
+        grid-template-rows: 1fr auto auto;
+        border-radius: 18px;
+        background:
+          linear-gradient(180deg, var(--cabinet-highlight) 0 30%, var(--cabinet-body) 30% 100%);
+        box-shadow:
+          inset 0 0 0 2px #000,
+          inset 0 0 40px rgba(0,0,0,.6),
+          0 40px 80px rgba(0,0,0,.6);
+        border: 1px solid var(--cabinet-edge);
+      }
+
+      .marquee {
+        position: relative;
+        margin: 16px 16px 8px;
+        height: 11%;
+        border-radius: 10px;
+        background: var(--marquee-bg);
+        box-shadow:
+          inset 0 -8px 18px rgba(0,0,0,.45),
+          0 6px 14px rgba(0,0,0,.5);
+        display: grid;
+        place-items: center;
+        overflow: hidden;
+      }
+      .marquee::after {
+        content: "NES EMULATOR";
+        letter-spacing: 4px;
+        font-weight: 800;
+        font-size: min(3.2vw, 22px);
+        color: rgba(255,255,255,.95);
+        text-shadow: 0 0 8px rgba(255,255,255,.35), 0 0 22px rgba(255,255,255,.2);
+        mix-blend-mode: screen;
+      }
+
+      .monitor {
+        position: relative;
+        margin: 0 22px;
+        border-radius: 14px;
+        padding: clamp(10px, 1.6vw, 18px);
+        background:
+          radial-gradient(120% 100% at 50% 0%, #1a1d23 0%, #11141a 60%, #0b0d12 100%);
+        box-shadow:
+          inset 0 0 0 2px #000,
+          inset 0 0 40px rgba(0,0,0,.7),
+          0 10px 24px rgba(0,0,0,.5);
+      }
+
+      .screen {
+        position: relative;
+        width: 100%;
+        padding-top: 77%; /* espaço para o canvas manter proporção no bezel */
+        border-radius: 10px;
+        background: var(--bezel);
+        overflow: hidden;
+        box-shadow:
+          inset 0 0 0 2px #05070b,
+          inset 0 0 40px rgba(0,0,0,.85);
+      }
+
+      /* Bezel gloss */
+      .screen::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background:
+          radial-gradient(120% 140% at 50% -10%, var(--bezel-gloss), transparent 50%) ,
+          radial-gradient(120% 140% at 50% 120%, rgba(255,255,255,0.02), transparent 50%);
+        pointer-events: none;
+      }
+
+      /* NES canvas como tela */
+      .screen .tube {
+        position: absolute;
+        inset: clamp(10px, 1.4vw, 16px);
+        border-radius: 8px;
+        overflow: hidden;
+        display: grid;
+        place-items: center;
+        background: #000;
+        /* ligeira curvatura CRT */
+        transform: perspective(900px) translateZ(0);
+      }
+
+      #nesCanvas {
+        width: 100%;
+        height: 100%;
+        image-rendering: pixelated;
+        background: #000;
+        border: none;
+        border-radius: 6px;
+        box-shadow:
+          inset 0 0 24px rgba(0,0,0,.7);
+        /* leve curvatura fake */
+        transform: translateZ(0) scale(1.0001);
+      }
+
+      /* scanlines opcionais */
+      .scanlines {
+        position: absolute;
+        inset: clamp(10px, 1.4vw, 16px);
+        border-radius: 8px;
+        pointer-events: none;
+        background:
+          repeating-linear-gradient(
+            to bottom,
+            rgba(0,0,0,0.0) 0px,
+            rgba(0,0,0,0.0) 2px,
+            rgba(0,0,0,0.15) 3px,
+            rgba(0,0,0,0.15) 4px
+          );
+        mix-blend-mode: multiply;
+        opacity: .45;
+      }
+
+      .speakers {
+        margin: 8px 24px 10px;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 14px;
+      }
+      .grill {
+        height: clamp(10px, 1.8vw, 18px);
+        background:
+          repeating-linear-gradient(
+            90deg,
+            var(--speaker) 0 8px,
+            #0e1013 8px 12px
+          );
+        border-radius: 6px;
+        box-shadow: inset 0 2px 6px rgba(0,0,0,.6);
+      }
+
+      .control-panel {
+        position: relative;
+        margin: 0 16px 16px;
+        border-radius: 12px 12px 18px 18px;
+        padding: 14px 18px 18px;
+        background:
+          radial-gradient(120% 120% at 50% 0%, #1e212a 0%, #141820 55%, #0d1118 100%);
+        box-shadow:
+          inset 0 0 0 2px #000,
+          inset 0 10px 26px rgba(0,0,0,.6),
+          0 -2px 0 #0008,
+          0 10px 28px rgba(0,0,0,.4);
+      }
+
+      .deck {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        align-items: center;
+        gap: 18px;
+      }
+
+      .stick {
+        width: clamp(70px, 14vw, 120px);
+        height: clamp(70px, 14vw, 120px);
+        background: radial-gradient(circle at 35% 35%, #2a2f3a, #12151b 70%);
+        border-radius: 50%;
+        position: relative;
+        box-shadow: inset 0 0 0 2px #000, inset 0 20px 40px rgba(0,0,0,.7);
+      }
+      .stick::after {
+        /* bolinha do joystick */
+        content: "";
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 26%;
+        height: 26%;
+        transform: translate(-50%, -65%);
+        background: radial-gradient(circle at 30% 30%, #f3f3f3, #b4b7be 55%, #8b8e98);
+        border-radius: 50%;
+        box-shadow: 0 2px 10px rgba(0,0,0,.45);
+      }
+      .stick.cross {
+        /* cruz */
+        position: absolute;
+        inset: 0;
+      }
+      .stick.cross::before,
+      .stick.cross::after {
+        content: "";
+        position: absolute;
+        background: radial-gradient(circle at 50% 30%, #1e222b, #0d1118 70%);
+        box-shadow: inset 0 0 0 2px #000, 0 4px 10px rgba(0,0,0,.5);
+      }
+      .stick.cross::before {
+        width: 26%;
+        height: 70%;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%,-50%);
+        border-radius: 10px;
+      }
+      .stick.cross::after {
+        width: 70%;
+        height: 26%;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%,-50%);
+        border-radius: 10px;
+      }
+
+      .buttons {
+        display: grid;
+        grid-auto-flow: column;
+        gap: clamp(10px, 1.8vw, 18px);
+        align-items: center;
+      }
+      .btn {
+        width: clamp(36px, 6vw, 52px);
+        height: clamp(36px, 6vw, 52px);
+        border-radius: 50%;
+        background: radial-gradient(circle at 35% 30%, #ff6a6a, #b02626 65%, #710d0d);
+        box-shadow: inset 0 0 0 2px #000, 0 6px 0 #4b0b0b, 0 12px 16px rgba(0,0,0,.6);
+      }
+      .btn.blue { background: radial-gradient(circle at 35% 30%, #6ab0ff, #1f4f9e 65%, #0d2a61); box-shadow: inset 0 0 0 2px #000, 0 6px 0 #0b2250, 0 12px 16px rgba(0,0,0,.6); }
+      .btn.yellow { background: radial-gradient(circle at 35% 30%, #ffe66a, #b38a18 65%, #6b4d09); box-shadow: inset 0 0 0 2px #000, 0 6px 0 #4d3b06, 0 12px 16px rgba(0,0,0,.6); }
+
+      .small-row {
+        margin-top: 10px;
+        display: grid;
+        grid-auto-flow: column;
+        justify-content: start;
+        gap: 12px;
+      }
+      .small {
+        width: clamp(40px, 6vw, 60px);
+        height: clamp(16px, 2.6vw, 22px);
+        border-radius: 16px;
+        background: linear-gradient(#2b3140, #121723);
+        box-shadow: inset 0 0 0 2px #000, 0 6px 10px rgba(0,0,0,.6);
+      }
+
+      /* ====== CONTROLES / DEBUG ORIGINAIS ====== */
 
       .controls {
         display: flex;
         gap: 1rem;
         flex-wrap: wrap;
         justify-content: center;
-        margin-bottom: 0.5rem;
+        margin: .5rem 0;
       }
-
       button, input[type="file"] {
         background-color: #2c2c2c;
         color: var(--text-color);
@@ -57,30 +309,13 @@
         transition: all 0.2s;
         border-radius: 4px;
       }
-
       button:hover:not(:disabled) {
         background-color: #3c3c3c;
         border-color: var(--accent-color);
         transform: translateY(-1px);
       }
-
-      button:active:not(:disabled) {
-        transform: translateY(0);
-      }
-
-      button:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-      }
-
-      #nesCanvas {
-        background-color: #000;
-        border: 4px solid var(--border-color);
-        image-rendering: pixelated;
-        /* upscale 2x preservando proporção NES (256x240) */
-        width: 512px;
-        height: 480px;
-      }
+      button:active:not(:disabled) { transform: translateY(0); }
+      button:disabled { opacity: 0.5; cursor: not-allowed; }
 
       #fpsCounter {
         font-family: monospace;
@@ -93,10 +328,9 @@
         flex-wrap: wrap;
         gap: 1rem;
         width: 100%;
-        max-width: 900px;
+        max-width: 980px;
         justify-content: center;
       }
-
       fieldset {
         border: 1px solid var(--border-color);
         border-radius: 8px;
@@ -104,12 +338,7 @@
         background: #1b1b1b;
         min-width: 300px;
       }
-
-      legend {
-        color: var(--debug-color);
-        font-weight: 600;
-        padding: 0 0.5rem;
-      }
+      legend { color: var(--debug-color); font-weight: 600; padding: 0 .5rem; }
 
       .debug-grid {
         display: grid;
@@ -118,36 +347,15 @@
         font-family: monospace;
         line-height: 1.5;
       }
+      .label { color: #9aa0a6; }
+      .value { color: var(--register-color); font-weight: bold; }
 
-      .label {
-        color: #9aa0a6;
-      }
-
-      .value {
-        color: var(--register-color);
-        font-weight: bold;
-      }
-
-      .flags span {
-        display: inline-block;
-        width: 1em;
-        text-align: center;
-        transition: all 0.2s;
-      }
-
-      .flag-on {
-        color: var(--flag-on);
-        font-weight: bold;
-        text-shadow: 0 0 4px rgba(76, 175, 80, 0.5);
-      }
-
-      .flag-off {
-        color: var(--flag-off);
-        opacity: 0.7;
-      }
+      .flags span { display: inline-block; width: 1em; text-align: center; transition: all 0.2s; }
+      .flag-on { color: var(--flag-on); font-weight: bold; text-shadow: 0 0 4px rgba(76,175,80,.5); }
+      .flag-off { color: var(--flag-off); opacity: .7; }
 
       .output {
-        margin-top: 0.5rem;
+        margin-top: .5rem;
         font-family: monospace;
         white-space: pre-wrap;
         background: #1e1e1e;
@@ -155,10 +363,9 @@
         border-radius: 8px;
         color: lightgreen;
         width: 100%;
-        max-width: 900px;
+        max-width: 980px;
         border: 1px solid var(--border-color);
       }
-
       .output.success { color: var(--success); }
       .output.error { color: var(--error); }
 
@@ -171,61 +378,19 @@
         border-radius: 4px;
         border: 1px solid var(--border-color);
       }
+      .disassembly div { padding: 0.2rem 0.5rem; border-radius: 2px; }
+      .disassembly .current { background: #333; color: var(--accent-color); font-weight: bold; }
 
-      .disassembly div {
-        padding: 0.2rem 0.5rem;
-        border-radius: 2px;
-      }
+      .disassembly::-webkit-scrollbar { width: 8px; }
+      .disassembly::-webkit-scrollbar-track { background: #1a1a1a; }
+      .disassembly::-webkit-scrollbar-thumb { background: #444; border-radius: 4px; }
 
-      .disassembly .current {
-        background: #333;
-        color: var(--accent-color);
-        font-weight: bold;
-      }
-
-      /* Scrollbar personalizada */
-      .disassembly::-webkit-scrollbar {
-        width: 8px;
-      }
-
-      .disassembly::-webkit-scrollbar-track {
-        background: #1a1a1a;
-      }
-
-      .disassembly::-webkit-scrollbar-thumb {
-        background: #444;
-        border-radius: 4px;
-      }
-
-      /* Efeito de loading para o canvas (opcional, basta aplicar .loading no canvas quando quiser) */
-      .loading::after {
-        content: "Loading...";
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        color: white;
-      }
-
-      /* Tooltip para os registradores */
-      [data-tooltip] {
-        position: relative;
-        cursor: help;
-      }
-
+      [data-tooltip] { position: relative; cursor: help; }
       [data-tooltip]:hover::after {
         content: attr(data-tooltip);
-        position: absolute;
-        bottom: 100%;
-        left: 50%;
-        transform: translateX(-50%);
-        background: #333;
-        color: white;
-        padding: 0.5rem;
-        border-radius: 4px;
-        font-size: 0.8rem;
-        white-space: nowrap;
-        z-index: 10;
+        position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%);
+        background: #333; color: white; padding: 0.5rem; border-radius: 4px;
+        font-size: 0.8rem; white-space: nowrap; z-index: 10;
       }
     </style>
   </head>
@@ -240,7 +405,45 @@
       <button id="pauseBtn" disabled data-tooltip="Pausar execução (F6)">Pause</button>
     </div>
 
-    <canvas id="nesCanvas" width="256" height="240"></canvas>
+    <!-- FLIPERAMA -->
+    <div class="cabinet" aria-label="Gabinete arcade">
+      <div class="marquee"></div>
+
+      <div class="monitor">
+        <div class="screen">
+          <div class="tube">
+            <!-- seu canvas vira a tela -->
+            <canvas id="nesCanvas" width="256" height="240"></canvas>
+          </div>
+          <div class="scanlines" aria-hidden="true"></div>
+        </div>
+      </div>
+
+      <div class="speakers">
+        <div class="grill"></div>
+        <div class="grill"></div>
+      </div>
+
+      <div class="control-panel">
+        <div class="deck">
+          <div class="stick">
+            <div class="stick cross"></div>
+          </div>
+          <div>
+            <div class="buttons">
+              <div class="btn"></div>
+              <div class="btn blue"></div>
+              <div class="btn yellow"></div>
+            </div>
+            <div class="small-row">
+              <div class="small" title="SELECT"></div>
+              <div class="small" title="START"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div id="fpsCounter">FPS: 0</div>
 
     <div class="debug-panel">

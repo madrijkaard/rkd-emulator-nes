@@ -3,31 +3,32 @@ import { RomLoader } from './rom/RomLoader';
 import { Memory } from './memory/Memory';
 import { Cpu6502 } from './cpu/Cpu6502';
 import { Mapper0 } from './mappers/Mapper0';
+import { Mapper2 } from './mappers/Mapper2';
 import { Mapper4 } from './mappers/Mapper4';
 import { Mirroring } from './mappers/Mirroring';
-import { buildTestRom } from './rom/TestRomBuilder';
 import { disassemble6502 } from './cpu/Disassembler';
 import { Flags6502 } from './cpu/Flags6502';
 import { Renderer } from './ppu/Renderer';
 import { Ppu } from './ppu/Ppu';
+import { ControllerButton } from './io/Controller';
 
-// ===================== Configuração =====================
+// ===================== Config =====================
 
-const ENABLE_TEST_ROM = false;
+const ENABLE_TEST_ROM = false; // manter false para ROMs reais
 
-// Como ainda não contamos ciclos por instrução na CPU, rodamos N instruções por frame.
-const CPU_STEPS_PER_FRAME = 800; // ajuste prático para manter animação responsiva
-const MAX_STEPS_PER_FRAME = 1000; // teto de segurança
+// Sem contagem real de ciclos ainda — heurística prática:
+const CPU_STEPS_PER_FRAME = 800;
+const MAX_STEPS_PER_FRAME = 1000;
 
-// Quantos passos de PPU por instrução de CPU (aproximação)
-const PPU_STEPS_PER_CPU_STEP = 6; // ~3 ciclos PPU por ciclo CPU * ~2 ciclos médios por instrução
+// Aproximação de 6 steps PPU por step CPU
+const PPU_STEPS_PER_CPU_STEP = 6;
 
-// ===================== Estado do emulador =====================
+// ===================== Estado =====================
 
 let cpu: Cpu6502 | null = null;
 let ppu: Ppu | null = null;
 let ppuRenderer: Renderer | null = null;
-let memoryRef: Memory | null = null; // <- referência p/ consultar mapper (IRQ MMC3)
+let memoryRef: Memory | null = null;
 
 let running = false;
 let animationFrameId: number | null = null;
@@ -37,7 +38,7 @@ let fps = 0;
 
 // ===================== UI =====================
 
-const elements = {
+const el = {
   romInput: document.getElementById('romInput') as HTMLInputElement,
   resetBtn: document.getElementById('resetBtn') as HTMLButtonElement,
   stepBtn: document.getElementById('stepBtn') as HTMLButtonElement,
@@ -58,66 +59,122 @@ const elements = {
 // ===================== Bootstrap =====================
 
 function init() {
-  setupEventListeners();
-  setupKeyboardShortcuts();
+  hookUI();
+  hookKeyboardShortcuts();
+  hookKeyboardController();
   initRenderer();
   clearScreen();
   updateUI();
   showMessage('Nenhum arquivo carregado.', 'info');
 
   if (ENABLE_TEST_ROM) {
-    bootWithRomBytes(buildTestRom())
-      .then(() => showMessage('ROM de teste carregada.', 'success'))
-      .catch(handleError);
+    // Você pode plugar um builder de ROM sintética se quiser
+    // bootWithRomBytes(buildTestRom()).catch(handleError);
   }
 }
 
 function initRenderer() {
-  ppuRenderer = new Renderer(elements.canvas);
-  elements.canvas.style.imageRendering = 'pixelated';
+  ppuRenderer = new Renderer(el.canvas);
+  el.canvas.style.imageRendering = 'pixelated';
 }
 
-function setupEventListeners() {
-  elements.romInput.addEventListener('change', async () => {
-    const file = elements.romInput.files?.[0];
+function hookUI() {
+  el.romInput.addEventListener('change', async () => {
+    const file = el.romInput.files?.[0];
     if (!file) return;
-
     try {
       showMessage('Carregando ROM...', 'info');
-      const arrayBuffer = await file.arrayBuffer();
-      await bootWithRomBytes(new Uint8Array(arrayBuffer));
-      showMessage(`ROM "${file.name}" carregada com sucesso.`, 'success');
-    } catch (err) {
-      handleError(err as Error);
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      await bootWithRomBytes(bytes);
+      showMessage(`ROM "${file.name}" carregada. Iniciando...`, 'success');
+
+      // >>> AJUSTE #1: começa a rodar automaticamente após o load <<<
+      startRunning();
+    } catch (e) {
+      handleError(e as Error);
     }
   });
 
-  elements.stepBtn.addEventListener('click', stepExecution);
-  elements.runBtn.addEventListener('click', startRunning);
-  elements.pauseBtn.addEventListener('click', pauseExecution);
-  elements.resetBtn.addEventListener('click', resetExecution);
+  el.stepBtn.addEventListener('click', stepExecution);
+  el.runBtn.addEventListener('click', startRunning);
+  el.pauseBtn.addEventListener('click', pauseExecution);
+  el.resetBtn.addEventListener('click', resetExecution);
+
+  window.addEventListener('blur', clearControllerStates);
 }
 
-function setupKeyboardShortcuts() {
+// ===================== Teclado → Controller 1 =====================
+
+function hookKeyboardController() {
+  const pressed = new Set<string>();
+
+  const setBtn = (btn: ControllerButton, down: boolean) => {
+    const c1 = memoryRef?.getController1();
+    if (!c1) return;
+    c1.setButton(btn, down);
+  };
+
+  const onKeyChange = (e: KeyboardEvent, down: boolean) => {
+    // evita repetir flood
+    if (down) {
+      if (pressed.has(e.code)) return;
+      pressed.add(e.code);
+    } else {
+      pressed.delete(e.code);
+    }
+
+    switch (e.code) {
+      // Direções
+      case 'ArrowUp': setBtn(ControllerButton.Up, down); break;
+      case 'ArrowDown': setBtn(ControllerButton.Down, down); break;
+      case 'ArrowLeft': setBtn(ControllerButton.Left, down); break;
+      case 'ArrowRight': setBtn(ControllerButton.Right, down); break;
+
+      // Botões — layout "FCEUX-like"
+      // Z = A, X = B (também ofereço J/K como alternativa)
+      case 'KeyZ':
+      case 'KeyJ': setBtn(ControllerButton.A, down); break;
+      case 'KeyX':
+      case 'KeyK': setBtn(ControllerButton.B, down); break;
+
+      // Start / Select
+      case 'Enter': setBtn(ControllerButton.Start, down); break;
+      case 'ShiftRight':
+      case 'ShiftLeft': setBtn(ControllerButton.Select, down); break;
+
+      default: break;
+    }
+  };
+
+  document.addEventListener('keydown', (e) => onKeyChange(e, true));
+  document.addEventListener('keyup', (e) => onKeyChange(e, false));
+}
+
+function clearControllerStates() {
+  const c1 = memoryRef?.getController1();
+  const c2 = memoryRef?.getController2();
+  if (!c1) return;
+  for (const b of [
+    ControllerButton.A, ControllerButton.B, ControllerButton.Select, ControllerButton.Start,
+    ControllerButton.Up, ControllerButton.Down, ControllerButton.Left, ControllerButton.Right,
+  ]) {
+    c1.setButton(b, false);
+    c2?.setButton(b, false);
+  }
+}
+
+// ===================== Atalhos de execução =====================
+
+function hookKeyboardShortcuts() {
   document.addEventListener('keydown', (e) => {
     if (!cpu) return;
 
     switch (e.key) {
-      case 'F1':
-        resetExecution();
-        break;
-      case 'F5':
-        startRunning();
-        break;
-      case 'F6':
-        pauseExecution();
-        break;
-      case 'F8':
-        stepExecution();
-        break;
-      case ' ':
-        running ? pauseExecution() : startRunning();
-        break;
+      case 'F1': resetExecution(); break;
+      case 'F5': startRunning(); break;
+      case 'F6': pauseExecution(); break;
+      case 'F8': stepExecution(); break;
+      case ' ': running ? pauseExecution() : startRunning(); break;
     }
   });
 }
@@ -125,62 +182,58 @@ function setupKeyboardShortcuts() {
 // ===================== Boot / Attach ROM =====================
 
 async function bootWithRomBytes(romBytes: Uint8Array) {
-  try {
-    const loader = new RomLoader(romBytes);
+  const loader = new RomLoader(romBytes);
 
-    if (loader.header.mapper !== 0 && loader.header.mapper !== 4) {
-      throw new Error(`Mapper não suportado: ${loader.header.mapper}`);
-    }
-
-    // Seleciona o mirroring inicial com base no header
-    const mirroring = loader.header.fourScreen
-      ? Mirroring.FourScreen
-      : loader.header.verticalMirroring
-      ? Mirroring.Vertical
-      : Mirroring.Horizontal;
-
-    const memory = new Memory();
-    memoryRef = memory;
-
-    if (loader.header.mapper === 0) {
-      memory.attachMapper(new Mapper0(loader.prgRom, loader.chrRom, mirroring));
-    } else if (loader.header.mapper === 4) {
-      memory.attachMapper(new Mapper4(loader.prgRom, loader.chrRom, mirroring));
-    }
-
-    cpu = new Cpu6502(memory);
-    ppu = memory.getPpu();
-
-    // Vetores obrigatórios (para ROMs sintéticas)
-    ensureVectors(memory);
-
-    cpu.reset();
-    ppu.reset();
-
-    updateUI();
-    enableControls(true);
-    clearScreen();
-    showMessage('Pronto.', 'success');
-  } catch (err) {
-    handleError(err as Error);
+  // Suporte: 0 (NROM), 2 (UxROM), 4 (MMC3)
+  const mapperId = loader.header.mapper;
+  if (![0, 2, 4].includes(mapperId)) {
+    throw new Error(`Mapper não suportado: ${mapperId}. (Suportados: 0, 2, 4)`);
   }
+
+  const mirroring = loader.header.fourScreen
+    ? Mirroring.FourScreen
+    : loader.header.verticalMirroring
+    ? Mirroring.Vertical
+    : Mirroring.Horizontal;
+
+  const memory = new Memory();
+  memoryRef = memory;
+
+  if (mapperId === 0) {
+    memory.attachMapper(new Mapper0(loader.prgRom, loader.chrRom, mirroring));
+  } else if (mapperId === 2) {
+    memory.attachMapper(new Mapper2(loader.prgRom, loader.chrRom, mirroring));
+  } else if (mapperId === 4) {
+    memory.attachMapper(new Mapper4(loader.prgRom, loader.chrRom, mirroring));
+  }
+
+  cpu = new Cpu6502(memory);
+  ppu = memory.getPpu();
+
+  ensureVectors(memory);
+
+  cpu.reset();
+  ppu.reset();
+
+  updateUI();
+  enableControls(true);
+  clearScreen();
+  showMessage('Pronto.', 'success');
 }
 
-/** Garante que os vetores de NMI/RESET/IRQ tenham algum valor útil quando ausentes. */
+/** Garante vetores de NMI/RESET/IRQ quando ROM sintética não os coloca. */
 function ensureVectors(memory: Memory) {
   const read = (a: number) => memory.read(a) & 0xff;
   const vec = (lo: number, hi: number) => ((read(hi) << 8) | read(lo)) & 0xffff;
 
   const reset = vec(0xfffc, 0xfffd);
   if (reset === 0x0000) {
-    // fallback para $8000
     memory.write(0xfffc, 0x00);
     memory.write(0xfffd, 0x80);
   }
 
   const nmi = vec(0xfffa, 0xfffb);
   if (nmi === 0x0000) {
-    // aponta para um RTI seguro em $8003 caso necessário
     memory.write(0xfffa, 0x03);
     memory.write(0xfffb, 0x80);
     if (memory.read(0x8003) === 0x00) memory.write(0x8003, 0x40); // RTI
@@ -207,15 +260,13 @@ function ppuStepMany(steps: number) {
       ppu.clearNmi();
     }
 
-    // IRQ do Mapper4 (MMC3) — checar após cada passo da PPU para reduzir latência
+    // IRQ do Mapper4 (MMC3)
     serviceMapperIrq();
   }
 }
 
-/** Checa IRQ do Mapper4 (MMC3) e dispara IRQ na CPU se necessário. */
 function serviceMapperIrq() {
   const mapper = memoryRef?.getMapper();
-  // só chama se o mapper expuser consumeIrq()
   const m4 = mapper && (mapper as any).consumeIrq ? (mapper as any) : null;
   if (m4 && cpu && m4.consumeIrq()) {
     cpu.irq?.();
@@ -224,15 +275,14 @@ function serviceMapperIrq() {
 
 function stepExecution() {
   if (!cpu || !ppu || running) return;
-
   try {
-    cpu.step(); // executa uma instrução (sem contagem de ciclos)
-    ppuStepMany(PPU_STEPS_PER_CPU_STEP * 4); // avança a PPU um pouco para “andar” o quadro
+    cpu.step();
+    ppuStepMany(PPU_STEPS_PER_CPU_STEP * 4);
     renderFrame();
     updateUI();
     showMessage('Step executado.', 'info');
-  } catch (err) {
-    handleError(err as Error);
+  } catch (e) {
+    handleError(e as Error);
   }
 }
 
@@ -249,18 +299,15 @@ function startRunning() {
     if (!running || !cpu || !ppu) return;
 
     try {
-      // instruções por frame (limitadas para não travar a UI)
       const budget = Math.min(CPU_STEPS_PER_FRAME, MAX_STEPS_PER_FRAME);
       for (let i = 0; i < budget; i++) {
         cpu.step();
         ppuStepMany(PPU_STEPS_PER_CPU_STEP);
-        // serviceMapperIrq é chamado dentro de ppuStepMany a cada passo da PPU
       }
 
       renderFrame();
       updateUI();
 
-      // FPS
       frameCount++;
       if (now - lastFpsUpdate >= 1000) {
         fps = frameCount;
@@ -270,8 +317,8 @@ function startRunning() {
       }
 
       animationFrameId = requestAnimationFrame(runFrame);
-    } catch (err) {
-      handleError(err as Error);
+    } catch (e) {
+      handleError(e as Error);
       pauseExecution();
     }
   };
@@ -297,10 +344,10 @@ function pauseExecution() {
 
 function resetExecution() {
   if (!cpu || !ppu) return;
-
   pauseExecution();
   cpu.reset();
   ppu.reset();
+  clearControllerStates();
   updateUI();
   clearScreen();
   showMessage('Reset concluído.', 'success');
@@ -319,23 +366,22 @@ function updateUI() {
 
 function updateRegisters() {
   if (!cpu) return;
-
   const hx = (v: number, w: number) => v.toString(16).toUpperCase().padStart(w, '0');
 
-  elements.regA.textContent = `$${hx(cpu.A, 2)}`;
-  elements.regX.textContent = `$${hx(cpu.X, 2)}`;
-  elements.regY.textContent = `$${hx(cpu.Y, 2)}`;
-  elements.regSP.textContent = `$${hx(cpu.SP, 2)}`;
-  elements.regPC.textContent = `$${hx(cpu.PC, 4)}`;
-  elements.regP.innerHTML = formatFlags(cpu.P);
+  el.regA.textContent = `$${hx(cpu.A, 2)}`;
+  el.regX.textContent = `$${hx(cpu.X, 2)}`;
+  el.regY.textContent = `$${hx(cpu.Y, 2)}`;
+  el.regSP.textContent = `$${hx(cpu.SP, 2)}`;
+  el.regPC.textContent = `$${hx(cpu.PC, 4)}`;
+  el.regP.innerHTML = formatFlags(cpu.P);
 }
 
 function updateDisassembly() {
-  if (!cpu || !elements.disassembly) return;
+  if (!cpu || !el.disassembly) return;
 
-  let html = '';
   const startAddr = Math.max(0, cpu.PC - 5);
   const endAddr = Math.min(0xffff, cpu.PC + 5);
+  let html = '';
 
   for (let addr = startAddr; addr <= endAddr; addr++) {
     const opcode = cpu.read(addr);
@@ -347,17 +393,15 @@ function updateDisassembly() {
     </div>`;
   }
 
-  elements.disassembly.innerHTML = html;
+  el.disassembly.innerHTML = html;
 
-  const currentLine = elements.disassembly.querySelector('.current');
-  if (currentLine) {
-    currentLine.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  }
+  const currentLine = el.disassembly.querySelector('.current');
+  if (currentLine) currentLine.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
 function updateFpsCounter() {
-  if (elements.fpsCounter) {
-    elements.fpsCounter.textContent = `FPS: ${fps}`;
+  if (el.fpsCounter) {
+    el.fpsCounter.textContent = `FPS: ${fps}`;
   }
 }
 
@@ -382,36 +426,34 @@ function formatFlags(p: number): string {
 }
 
 function clearScreen() {
-  if (ppuRenderer) {
-    ppuRenderer.clear();
-  }
+  if (ppuRenderer) ppuRenderer.clear();
 }
 
 function clearUI() {
-  elements.regA.textContent = '--';
-  elements.regX.textContent = '--';
-  elements.regY.textContent = '--';
-  elements.regSP.textContent = '--';
-  elements.regPC.textContent = '--';
-  elements.regP.textContent = 'NVUBDIZC';
-  elements.disassembly.innerHTML = '';
-  if (elements.fpsCounter) elements.fpsCounter.textContent = 'FPS: 0';
+  el.regA.textContent = '--';
+  el.regX.textContent = '--';
+  el.regY.textContent = '--';
+  el.regSP.textContent = '--';
+  el.regPC.textContent = '--';
+  el.regP.textContent = 'NVUBDIZC';
+  el.disassembly.innerHTML = '';
+  if (el.fpsCounter) el.fpsCounter.textContent = 'FPS: 0';
 }
 
 /** Mostra mensagem no painel e alterna classes de status (info/success/error). */
 function showMessage(message: string, kind: 'info' | 'success' | 'error' = 'info') {
-  elements.output.textContent = message;
-  elements.output.classList.remove('success', 'error');
-  if (kind === 'success') elements.output.classList.add('success');
-  if (kind === 'error') elements.output.classList.add('error');
+  el.output.textContent = message;
+  el.output.classList.remove('success', 'error');
+  if (kind === 'success') el.output.classList.add('success');
+  if (kind === 'error') el.output.classList.add('error');
 }
 
 function enableControls(_enabled = false) {
   const hasCpu = !!cpu;
-  elements.stepBtn.disabled = !hasCpu || running;
-  elements.runBtn.disabled = !hasCpu || running;
-  elements.pauseBtn.disabled = !hasCpu || !running;
-  elements.resetBtn.disabled = !hasCpu;
+  el.stepBtn.disabled = !hasCpu || running;
+  el.runBtn.disabled = !hasCpu || running;
+  el.pauseBtn.disabled = !hasCpu || !running;
+  el.resetBtn.disabled = !hasCpu;
 }
 
 function handleError(err: Error) {
