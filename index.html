@@ -48,15 +48,127 @@
         text-shadow: 0 0 8px rgba(255, 85, 85, 0.3);
       }
 
-      /* ====== FLIPERAMA ====== */
+      /* ====== LAYOUT PRINCIPAL (ESQ x DIR) ====== */
+      .content {
+        width: 100%;
+        max-width: 1280px;
+        display: grid;
+        grid-template-columns: minmax(320px, 420px) 1fr;
+        gap: 1rem;
+        align-items: start;
+      }
+
+      .left-panel {
+        display: grid;
+        grid-template-rows: auto auto auto; /* CPU State, Disassembly, Output */
+        gap: 1rem;
+      }
+
+      .right-panel {
+        display: grid;
+        gap: .75rem;
+        justify-items: center;
+      }
+
+      /* ====== CONTROLES ====== */
+      .controls {
+        display: flex;
+        gap: 1rem;
+        flex-wrap: wrap;
+        justify-content: center;
+        margin: .5rem 0;
+      }
+      button, input[type="file"] {
+        background-color: #2c2c2c;
+        color: var(--text-color);
+        border: 1px solid var(--border-color);
+        padding: 0.5rem 1rem;
+        font-family: inherit;
+        cursor: pointer;
+        transition: all 0.2s;
+        border-radius: 4px;
+      }
+      button:hover:not(:disabled) {
+        background-color: #3c3c3c;
+        border-color: var(--accent-color);
+        transform: translateY(-1px);
+      }
+      button:active:not(:disabled) { transform: translateY(0); }
+      button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+      #fpsCounter {
+        font-family: monospace;
+        color: var(--debug-color);
+        text-align: center;
+      }
+
+      /* ====== DEBUG PANELS ====== */
+      fieldset {
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        padding: 0.75rem 1rem;
+        background: #1b1b1b;
+        min-width: 0;
+      }
+      legend { color: var(--debug-color); font-weight: 600; padding: 0 .5rem; }
+
+      .debug-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.4rem 1rem;
+        font-family: monospace;
+        line-height: 1.5;
+      }
+      .label { color: #9aa0a6; }
+      .value { color: var(--register-color); font-weight: bold; }
+
+      .flags span { display: inline-block; width: 1em; text-align: center; transition: all 0.2s; }
+      .flag-on { color: var(--flag-on); font-weight: bold; text-shadow: 0 0 4px rgba(76,175,80,.5); }
+      .flag-off { color: var(--flag-off); opacity: .7; }
+
+      .disassembly {
+        height: 240px;
+        overflow-y: auto;
+        font-family: monospace;
+        background: #1e1e1e;
+        padding: 0.5rem;
+        border-radius: 4px;
+        border: 1px solid var(--border-color);
+      }
+      .disassembly div { padding: 0.2rem 0.5rem; border-radius: 2px; }
+      .disassembly .current { background: #333; color: var(--accent-color); font-weight: bold; }
+      .disassembly::-webkit-scrollbar { width: 8px; }
+      .disassembly::-webkit-scrollbar-track { background: #1a1a1a; }
+      .disassembly::-webkit-scrollbar-thumb { background: #444; border-radius: 4px; }
+
+      .output {
+        font-family: monospace;
+        white-space: pre-wrap;
+        background: #1e1e1e;
+        padding: 1rem;
+        border-radius: 8px;
+        color: lightgreen;
+        border: 1px solid var(--border-color);
+      }
+      .output.success { color: var(--success); }
+      .output.error { color: var(--error); }
+
+      [data-tooltip] { position: relative; cursor: help; }
+      [data-tooltip]:hover::after {
+        content: attr(data-tooltip);
+        position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%);
+        background: #333; color: white; padding: 0.5rem; border-radius: 4px;
+        font-size: 0.8rem; white-space: nowrap; z-index: 10;
+      }
+
+      /* ====== GABINETE (DIREITA) ====== */
 
       .cabinet {
         position: relative;
-        width: clamp(320px, 70vw, 820px);
-        /* proporção aproximada de gabinete */
+        width: clamp(320px, 60vw, 860px);
         aspect-ratio: 5 / 7;
         display: grid;
-        grid-template-rows: 1fr auto auto;
+        grid-template-rows: auto 1fr auto auto;
         border-radius: 18px;
         background:
           linear-gradient(180deg, var(--cabinet-highlight) 0 30%, var(--cabinet-body) 30% 100%);
@@ -69,8 +181,8 @@
 
       .marquee {
         position: relative;
-        margin: 16px 16px 8px;
-        height: 11%;
+        margin: 12px 12px 4px; /* margem inferior MENOR para colar mais na tela */
+        height: 10%;
         border-radius: 10px;
         background: var(--marquee-bg);
         box-shadow:
@@ -92,21 +204,23 @@
 
       .monitor {
         position: relative;
-        margin: 0 22px;
+        margin: 0 18px;
         border-radius: 14px;
-        padding: clamp(10px, 1.6vw, 18px);
+        padding: 8px; /* REDUZIDO para aproximar o bezel do canvas */
         background:
           radial-gradient(120% 100% at 50% 0%, #1a1d23 0%, #11141a 60%, #0b0d12 100%);
         box-shadow:
           inset 0 0 0 2px #000,
           inset 0 0 40px rgba(0,0,0,.7),
           0 10px 24px rgba(0,0,0,.5);
+        display: grid;
+        align-items: center;
       }
 
       .screen {
         position: relative;
         width: 100%;
-        padding-top: 77%; /* espaço para o canvas manter proporção no bezel */
+        aspect-ratio: 256 / 240; /* em vez de padding-top gigante */
         border-radius: 10px;
         background: var(--bezel);
         overflow: hidden;
@@ -129,13 +243,12 @@
       /* NES canvas como tela */
       .screen .tube {
         position: absolute;
-        inset: clamp(10px, 1.4vw, 16px);
+        inset: 4px; /* MENOR: deixa o canvas chegar mais perto da borda */
         border-radius: 8px;
         overflow: hidden;
         display: grid;
         place-items: center;
         background: #000;
-        /* ligeira curvatura CRT */
         transform: perspective(900px) translateZ(0);
       }
 
@@ -146,16 +259,14 @@
         background: #000;
         border: none;
         border-radius: 6px;
-        box-shadow:
-          inset 0 0 24px rgba(0,0,0,.7);
-        /* leve curvatura fake */
+        box-shadow: inset 0 0 24px rgba(0,0,0,.7);
         transform: translateZ(0) scale(1.0001);
       }
 
       /* scanlines opcionais */
       .scanlines {
         position: absolute;
-        inset: clamp(10px, 1.4vw, 16px);
+        inset: 4px; /* acompanha a tube */
         border-radius: 8px;
         pointer-events: none;
         background:
@@ -171,10 +282,10 @@
       }
 
       .speakers {
-        margin: 8px 24px 10px;
+        margin: 6px 20px 8px;
         display: grid;
         grid-template-columns: 1fr 1fr;
-        gap: 14px;
+        gap: 12px;
       }
       .grill {
         height: clamp(10px, 1.8vw, 18px);
@@ -190,9 +301,9 @@
 
       .control-panel {
         position: relative;
-        margin: 0 16px 16px;
+        margin: 0 14px 14px;
         border-radius: 12px 12px 18px 18px;
-        padding: 14px 18px 18px;
+        padding: 12px 16px 16px;
         background:
           radial-gradient(120% 120% at 50% 0%, #1e212a 0%, #141820 55%, #0d1118 100%);
         box-shadow:
@@ -206,7 +317,7 @@
         display: grid;
         grid-template-columns: 1fr auto;
         align-items: center;
-        gap: 18px;
+        gap: 16px;
       }
 
       .stick {
@@ -218,7 +329,6 @@
         box-shadow: inset 0 0 0 2px #000, inset 0 20px 40px rgba(0,0,0,.7);
       }
       .stick::after {
-        /* bolinha do joystick */
         content: "";
         position: absolute;
         top: 50%;
@@ -231,7 +341,6 @@
         box-shadow: 0 2px 10px rgba(0,0,0,.45);
       }
       .stick.cross {
-        /* cruz */
         position: absolute;
         inset: 0;
       }
@@ -289,109 +398,6 @@
         background: linear-gradient(#2b3140, #121723);
         box-shadow: inset 0 0 0 2px #000, 0 6px 10px rgba(0,0,0,.6);
       }
-
-      /* ====== CONTROLES / DEBUG ORIGINAIS ====== */
-
-      .controls {
-        display: flex;
-        gap: 1rem;
-        flex-wrap: wrap;
-        justify-content: center;
-        margin: .5rem 0;
-      }
-      button, input[type="file"] {
-        background-color: #2c2c2c;
-        color: var(--text-color);
-        border: 1px solid var(--border-color);
-        padding: 0.5rem 1rem;
-        font-family: inherit;
-        cursor: pointer;
-        transition: all 0.2s;
-        border-radius: 4px;
-      }
-      button:hover:not(:disabled) {
-        background-color: #3c3c3c;
-        border-color: var(--accent-color);
-        transform: translateY(-1px);
-      }
-      button:active:not(:disabled) { transform: translateY(0); }
-      button:disabled { opacity: 0.5; cursor: not-allowed; }
-
-      #fpsCounter {
-        font-family: monospace;
-        color: var(--debug-color);
-        align-self: center;
-      }
-
-      .debug-panel {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 1rem;
-        width: 100%;
-        max-width: 980px;
-        justify-content: center;
-      }
-      fieldset {
-        border: 1px solid var(--border-color);
-        border-radius: 8px;
-        padding: 0.75rem 1rem;
-        background: #1b1b1b;
-        min-width: 300px;
-      }
-      legend { color: var(--debug-color); font-weight: 600; padding: 0 .5rem; }
-
-      .debug-grid {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 0.4rem 1rem;
-        font-family: monospace;
-        line-height: 1.5;
-      }
-      .label { color: #9aa0a6; }
-      .value { color: var(--register-color); font-weight: bold; }
-
-      .flags span { display: inline-block; width: 1em; text-align: center; transition: all 0.2s; }
-      .flag-on { color: var(--flag-on); font-weight: bold; text-shadow: 0 0 4px rgba(76,175,80,.5); }
-      .flag-off { color: var(--flag-off); opacity: .7; }
-
-      .output {
-        margin-top: .5rem;
-        font-family: monospace;
-        white-space: pre-wrap;
-        background: #1e1e1e;
-        padding: 1rem;
-        border-radius: 8px;
-        color: lightgreen;
-        width: 100%;
-        max-width: 980px;
-        border: 1px solid var(--border-color);
-      }
-      .output.success { color: var(--success); }
-      .output.error { color: var(--error); }
-
-      .disassembly {
-        height: 200px;
-        overflow-y: auto;
-        font-family: monospace;
-        background: #1e1e1e;
-        padding: 0.5rem;
-        border-radius: 4px;
-        border: 1px solid var(--border-color);
-      }
-      .disassembly div { padding: 0.2rem 0.5rem; border-radius: 2px; }
-      .disassembly .current { background: #333; color: var(--accent-color); font-weight: bold; }
-
-      .disassembly::-webkit-scrollbar { width: 8px; }
-      .disassembly::-webkit-scrollbar-track { background: #1a1a1a; }
-      .disassembly::-webkit-scrollbar-thumb { background: #444; border-radius: 4px; }
-
-      [data-tooltip] { position: relative; cursor: help; }
-      [data-tooltip]:hover::after {
-        content: attr(data-tooltip);
-        position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%);
-        background: #333; color: white; padding: 0.5rem; border-radius: 4px;
-        font-size: 0.8rem; white-space: nowrap; z-index: 10;
-      }
     </style>
   </head>
   <body>
@@ -405,78 +411,82 @@
       <button id="pauseBtn" disabled data-tooltip="Pausar execução (F6)">Pause</button>
     </div>
 
-    <!-- FLIPERAMA -->
-    <div class="cabinet" aria-label="Gabinete arcade">
-      <div class="marquee"></div>
-
-      <div class="monitor">
-        <div class="screen">
-          <div class="tube">
-            <!-- seu canvas vira a tela -->
-            <canvas id="nesCanvas" width="256" height="240"></canvas>
-          </div>
-          <div class="scanlines" aria-hidden="true"></div>
-        </div>
-      </div>
-
-      <div class="speakers">
-        <div class="grill"></div>
-        <div class="grill"></div>
-      </div>
-
-      <div class="control-panel">
-        <div class="deck">
-          <div class="stick">
-            <div class="stick cross"></div>
-          </div>
-          <div>
-            <div class="buttons">
-              <div class="btn"></div>
-              <div class="btn blue"></div>
-              <div class="btn yellow"></div>
-            </div>
-            <div class="small-row">
-              <div class="small" title="SELECT"></div>
-              <div class="small" title="START"></div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
     <div id="fpsCounter">FPS: 0</div>
 
-    <div class="debug-panel">
-      <fieldset>
-        <legend>CPU State</legend>
-        <div class="debug-grid">
-          <div class="label">A (Accumulator):</div>
-          <div class="value" id="regA">--</div>
+    <div class="content">
+      <!-- Painéis à esquerda -->
+      <div class="left-panel">
+        <fieldset>
+          <legend>CPU State</legend>
+          <div class="debug-grid">
+            <div class="label">A (Accumulator):</div>
+            <div class="value" id="regA">--</div>
 
-          <div class="label">X (Index X):</div>
-          <div class="value" id="regX">--</div>
+            <div class="label">X (Index X):</div>
+            <div class="value" id="regX">--</div>
 
-          <div class="label">Y (Index Y):</div>
-          <div class="value" id="regY">--</div>
+            <div class="label">Y (Index Y):</div>
+            <div class="value" id="regY">--</div>
 
-          <div class="label">SP (Stack Pointer):</div>
-          <div class="value" id="regSP">--</div>
+            <div class="label">SP (Stack Pointer):</div>
+            <div class="value" id="regSP">--</div>
 
-          <div class="label">PC (Program Counter):</div>
-          <div class="value" id="regPC">--</div>
+            <div class="label">PC (Program Counter):</div>
+            <div class="value" id="regPC">--</div>
 
-          <div class="label">Status Flags:</div>
-          <div class="value" id="regP">NVUBDIZC</div>
-        </div>
-      </fieldset>
+            <div class="label">Status Flags:</div>
+            <div class="value" id="regP">NVUBDIZC</div>
+          </div>
+        </fieldset>
 
-      <fieldset>
-        <legend>Disassembly (PC ±5)</legend>
-        <div class="disassembly" id="disassembly"></div>
-      </fieldset>
+        <fieldset>
+          <legend>Disassembly (PC ±5)</legend>
+          <div class="disassembly" id="disassembly"></div>
+        </fieldset>
+
+        <div class="output" id="output">Nenhum arquivo carregado</div>
+      </div>
+
+      <!-- Gabinete com a tela do jogo à direita -->
+      <div class="right-panel">
+        <div class="cabinet" aria-label="Gabinete arcade">
+          <div class="marquee"></div>
+
+          <div class="monitor">
+            <div class="screen">
+              <div class="tube">
+                <canvas id="nesCanvas" width="256" height="240"></canvas>
+              </div>
+              <div class="scanlines" aria-hidden="true"></div>
+            </div>
+          </div>
+
+          <div class="speakers">
+            <div class="grill"></div>
+            <div class="grill"></div>
+          </div>
+
+          <div class="control-panel">
+            <div class="deck">
+              <div class="stick">
+                <div class="stick cross"></div>
+              </div>
+              <div>
+                <div class="buttons">
+                  <div class="btn"></div>
+                  <div class="btn blue"></div>
+                  <div class="btn yellow"></div>
+                </div>
+                <div class="small-row">
+                  <div class="small" title="SELECT"></div>
+                  <div class="small" title="START"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div> <!-- /cabinet -->
+      </div>
     </div>
-
-    <div class="output" id="output">Nenhum arquivo carregado</div>
 
     <script type="module" src="/src/main.ts"></script>
   </body>
