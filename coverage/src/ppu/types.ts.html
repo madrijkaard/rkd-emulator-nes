@@ -1,0 +1,406 @@
+
+<!doctype html>
+<html lang="en">
+
+<head>
+    <title>Code coverage report for src/ppu/types.ts</title>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="../../prettify.css" />
+    <link rel="stylesheet" href="../../base.css" />
+    <link rel="shortcut icon" type="image/x-icon" href="../../favicon.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style type='text/css'>
+        .coverage-summary .sorter {
+            background-image: url(../../sort-arrow-sprite.png);
+        }
+    </style>
+</head>
+    
+<body>
+<div class='wrapper'>
+    <div class='pad1'>
+        <h1><a href="../../index.html">All files</a> / <a href="index.html">src/ppu</a> types.ts</h1>
+        <div class='clearfix'>
+            
+            <div class='fl pad1y space-right2'>
+                <span class="strong">100% </span>
+                <span class="quiet">Statements</span>
+                <span class='fraction'>71/71</span>
+            </div>
+        
+            
+            <div class='fl pad1y space-right2'>
+                <span class="strong">100% </span>
+                <span class="quiet">Branches</span>
+                <span class='fraction'>1/1</span>
+            </div>
+        
+            
+            <div class='fl pad1y space-right2'>
+                <span class="strong">100% </span>
+                <span class="quiet">Functions</span>
+                <span class='fraction'>0/0</span>
+            </div>
+        
+            
+            <div class='fl pad1y space-right2'>
+                <span class="strong">100% </span>
+                <span class="quiet">Lines</span>
+                <span class='fraction'>71/71</span>
+            </div>
+        
+            
+        </div>
+        <p class="quiet">
+            Press <em>n</em> or <em>j</em> to go to the next uncovered block, <em>b</em>, <em>p</em> or <em>k</em> for the previous block.
+        </p>
+        <template id="filterTemplate">
+            <div class="quiet">
+                Filter:
+                <input type="search" id="fileSearch">
+            </div>
+        </template>
+    </div>
+    <div class='status-line high'></div>
+    <pre><table class="coverage">
+<tr><td class="line-count quiet"><a name='L1'></a><a href='#L1'>1</a>
+<a name='L2'></a><a href='#L2'>2</a>
+<a name='L3'></a><a href='#L3'>3</a>
+<a name='L4'></a><a href='#L4'>4</a>
+<a name='L5'></a><a href='#L5'>5</a>
+<a name='L6'></a><a href='#L6'>6</a>
+<a name='L7'></a><a href='#L7'>7</a>
+<a name='L8'></a><a href='#L8'>8</a>
+<a name='L9'></a><a href='#L9'>9</a>
+<a name='L10'></a><a href='#L10'>10</a>
+<a name='L11'></a><a href='#L11'>11</a>
+<a name='L12'></a><a href='#L12'>12</a>
+<a name='L13'></a><a href='#L13'>13</a>
+<a name='L14'></a><a href='#L14'>14</a>
+<a name='L15'></a><a href='#L15'>15</a>
+<a name='L16'></a><a href='#L16'>16</a>
+<a name='L17'></a><a href='#L17'>17</a>
+<a name='L18'></a><a href='#L18'>18</a>
+<a name='L19'></a><a href='#L19'>19</a>
+<a name='L20'></a><a href='#L20'>20</a>
+<a name='L21'></a><a href='#L21'>21</a>
+<a name='L22'></a><a href='#L22'>22</a>
+<a name='L23'></a><a href='#L23'>23</a>
+<a name='L24'></a><a href='#L24'>24</a>
+<a name='L25'></a><a href='#L25'>25</a>
+<a name='L26'></a><a href='#L26'>26</a>
+<a name='L27'></a><a href='#L27'>27</a>
+<a name='L28'></a><a href='#L28'>28</a>
+<a name='L29'></a><a href='#L29'>29</a>
+<a name='L30'></a><a href='#L30'>30</a>
+<a name='L31'></a><a href='#L31'>31</a>
+<a name='L32'></a><a href='#L32'>32</a>
+<a name='L33'></a><a href='#L33'>33</a>
+<a name='L34'></a><a href='#L34'>34</a>
+<a name='L35'></a><a href='#L35'>35</a>
+<a name='L36'></a><a href='#L36'>36</a>
+<a name='L37'></a><a href='#L37'>37</a>
+<a name='L38'></a><a href='#L38'>38</a>
+<a name='L39'></a><a href='#L39'>39</a>
+<a name='L40'></a><a href='#L40'>40</a>
+<a name='L41'></a><a href='#L41'>41</a>
+<a name='L42'></a><a href='#L42'>42</a>
+<a name='L43'></a><a href='#L43'>43</a>
+<a name='L44'></a><a href='#L44'>44</a>
+<a name='L45'></a><a href='#L45'>45</a>
+<a name='L46'></a><a href='#L46'>46</a>
+<a name='L47'></a><a href='#L47'>47</a>
+<a name='L48'></a><a href='#L48'>48</a>
+<a name='L49'></a><a href='#L49'>49</a>
+<a name='L50'></a><a href='#L50'>50</a>
+<a name='L51'></a><a href='#L51'>51</a>
+<a name='L52'></a><a href='#L52'>52</a>
+<a name='L53'></a><a href='#L53'>53</a>
+<a name='L54'></a><a href='#L54'>54</a>
+<a name='L55'></a><a href='#L55'>55</a>
+<a name='L56'></a><a href='#L56'>56</a>
+<a name='L57'></a><a href='#L57'>57</a>
+<a name='L58'></a><a href='#L58'>58</a>
+<a name='L59'></a><a href='#L59'>59</a>
+<a name='L60'></a><a href='#L60'>60</a>
+<a name='L61'></a><a href='#L61'>61</a>
+<a name='L62'></a><a href='#L62'>62</a>
+<a name='L63'></a><a href='#L63'>63</a>
+<a name='L64'></a><a href='#L64'>64</a>
+<a name='L65'></a><a href='#L65'>65</a>
+<a name='L66'></a><a href='#L66'>66</a>
+<a name='L67'></a><a href='#L67'>67</a>
+<a name='L68'></a><a href='#L68'>68</a>
+<a name='L69'></a><a href='#L69'>69</a>
+<a name='L70'></a><a href='#L70'>70</a>
+<a name='L71'></a><a href='#L71'>71</a>
+<a name='L72'></a><a href='#L72'>72</a>
+<a name='L73'></a><a href='#L73'>73</a>
+<a name='L74'></a><a href='#L74'>74</a>
+<a name='L75'></a><a href='#L75'>75</a>
+<a name='L76'></a><a href='#L76'>76</a>
+<a name='L77'></a><a href='#L77'>77</a>
+<a name='L78'></a><a href='#L78'>78</a>
+<a name='L79'></a><a href='#L79'>79</a>
+<a name='L80'></a><a href='#L80'>80</a>
+<a name='L81'></a><a href='#L81'>81</a>
+<a name='L82'></a><a href='#L82'>82</a>
+<a name='L83'></a><a href='#L83'>83</a>
+<a name='L84'></a><a href='#L84'>84</a>
+<a name='L85'></a><a href='#L85'>85</a>
+<a name='L86'></a><a href='#L86'>86</a>
+<a name='L87'></a><a href='#L87'>87</a>
+<a name='L88'></a><a href='#L88'>88</a>
+<a name='L89'></a><a href='#L89'>89</a>
+<a name='L90'></a><a href='#L90'>90</a>
+<a name='L91'></a><a href='#L91'>91</a>
+<a name='L92'></a><a href='#L92'>92</a>
+<a name='L93'></a><a href='#L93'>93</a>
+<a name='L94'></a><a href='#L94'>94</a>
+<a name='L95'></a><a href='#L95'>95</a>
+<a name='L96'></a><a href='#L96'>96</a>
+<a name='L97'></a><a href='#L97'>97</a>
+<a name='L98'></a><a href='#L98'>98</a>
+<a name='L99'></a><a href='#L99'>99</a>
+<a name='L100'></a><a href='#L100'>100</a>
+<a name='L101'></a><a href='#L101'>101</a>
+<a name='L102'></a><a href='#L102'>102</a>
+<a name='L103'></a><a href='#L103'>103</a>
+<a name='L104'></a><a href='#L104'>104</a>
+<a name='L105'></a><a href='#L105'>105</a>
+<a name='L106'></a><a href='#L106'>106</a>
+<a name='L107'></a><a href='#L107'>107</a>
+<a name='L108'></a><a href='#L108'>108</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">64x</span>
+<span class="cline-any cline-yes">64x</span>
+<span class="cline-any cline-yes">64x</span>
+<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">// src/ppu/types.ts
+&nbsp;
+export interface Pixel {
+  r: number;
+  g: number;
+  b: number;
+  a: number;
+}
+&nbsp;
+export interface RendererOptions {
+  scanlines?: boolean;
+  overscan?: boolean;
+}
+&nbsp;
+/**
+ * Paleta NTSC de 64 cores usada amplamente em emuladores (variante da listada na nesdev wiki).
+ * Valores em RGB com alpha 255. A ordem é 0x00..0x3F.
+ *
+ * Referência comum (hex):
+ * Row 0: 7C7C7C 0000FC 0000BC 4428BC 940084 A80020 A81000 881400 503000 007800 006800 005800 004058 000000 000000 000000
+ * Row 1: BCBCBC 0078F8 0058F8 6844FC D800CC E40058 F83800 E45C10 AC7C00 00B800 00A800 00A844 008888 000000 000000 000000
+ * Row 2: F8F8F8 3CBCFC 6888FC 9878F8 F878F8 F85898 F87858 FCA044 F8B800 B8F818 58D858 58F898 00E8D8 787878 000000 000000
+ * Row 3: FCFCFC A4E4FC B8B8F8 D8B8F8 F8B8F8 F8A4C0 F0D0B0 FCE0A8 F8D878 D8F878 B8F8B8 B8F8D8 00FCFC F8D8F8 000000 000000
+ */
+export const NES_PALETTE: Pixel[] = [
+  // 0x00 - 0x0F
+  { r: 0x7C, g: 0x7C, b: 0x7C, a: 255 }, // 0x00
+  { r: 0x00, g: 0x00, b: 0xFC, a: 255 }, // 0x01
+  { r: 0x00, g: 0x00, b: 0xBC, a: 255 }, // 0x02
+  { r: 0x44, g: 0x28, b: 0xBC, a: 255 }, // 0x03
+  { r: 0x94, g: 0x00, b: 0x84, a: 255 }, // 0x04
+  { r: 0xA8, g: 0x00, b: 0x20, a: 255 }, // 0x05
+  { r: 0xA8, g: 0x10, b: 0x00, a: 255 }, // 0x06
+  { r: 0x88, g: 0x14, b: 0x00, a: 255 }, // 0x07
+  { r: 0x50, g: 0x30, b: 0x00, a: 255 }, // 0x08
+  { r: 0x00, g: 0x78, b: 0x00, a: 255 }, // 0x09
+  { r: 0x00, g: 0x68, b: 0x00, a: 255 }, // 0x0A
+  { r: 0x00, g: 0x58, b: 0x00, a: 255 }, // 0x0B
+  { r: 0x00, g: 0x40, b: 0x58, a: 255 }, // 0x0C
+  { r: 0x00, g: 0x00, b: 0x00, a: 255 }, // 0x0D
+  { r: 0x00, g: 0x00, b: 0x00, a: 255 }, // 0x0E
+  { r: 0x00, g: 0x00, b: 0x00, a: 255 }, // 0x0F
+&nbsp;
+  // 0x10 - 0x1F
+  { r: 0xBC, g: 0xBC, b: 0xBC, a: 255 }, // 0x10
+  { r: 0x00, g: 0x78, b: 0xF8, a: 255 }, // 0x11
+  { r: 0x00, g: 0x58, b: 0xF8, a: 255 }, // 0x12
+  { r: 0x68, g: 0x44, b: 0xFC, a: 255 }, // 0x13
+  { r: 0xD8, g: 0x00, b: 0xCC, a: 255 }, // 0x14
+  { r: 0xE4, g: 0x00, b: 0x58, a: 255 }, // 0x15
+  { r: 0xF8, g: 0x38, b: 0x00, a: 255 }, // 0x16
+  { r: 0xE4, g: 0x5C, b: 0x10, a: 255 }, // 0x17
+  { r: 0xAC, g: 0x7C, b: 0x00, a: 255 }, // 0x18
+  { r: 0x00, g: 0xB8, b: 0x00, a: 255 }, // 0x19
+  { r: 0x00, g: 0xA8, b: 0x00, a: 255 }, // 0x1A
+  { r: 0x00, g: 0xA8, b: 0x44, a: 255 }, // 0x1B
+  { r: 0x00, g: 0x88, b: 0x88, a: 255 }, // 0x1C
+  { r: 0x00, g: 0x00, b: 0x00, a: 255 }, // 0x1D
+  { r: 0x00, g: 0x00, b: 0x00, a: 255 }, // 0x1E
+  { r: 0x00, g: 0x00, b: 0x00, a: 255 }, // 0x1F
+&nbsp;
+  // 0x20 - 0x2F
+  { r: 0xF8, g: 0xF8, b: 0xF8, a: 255 }, // 0x20
+  { r: 0x3C, g: 0xBC, b: 0xFC, a: 255 }, // 0x21
+  { r: 0x68, g: 0x88, b: 0xFC, a: 255 }, // 0x22
+  { r: 0x98, g: 0x78, b: 0xF8, a: 255 }, // 0x23
+  { r: 0xF8, g: 0x78, b: 0xF8, a: 255 }, // 0x24
+  { r: 0xF8, g: 0x58, b: 0x98, a: 255 }, // 0x25
+  { r: 0xF8, g: 0x78, b: 0x58, a: 255 }, // 0x26
+  { r: 0xFC, g: 0xA0, b: 0x44, a: 255 }, // 0x27
+  { r: 0xF8, g: 0xB8, b: 0x00, a: 255 }, // 0x28
+  { r: 0xB8, g: 0xF8, b: 0x18, a: 255 }, // 0x29
+  { r: 0x58, g: 0xD8, b: 0x58, a: 255 }, // 0x2A
+  { r: 0x58, g: 0xF8, b: 0x98, a: 255 }, // 0x2B
+  { r: 0x00, g: 0xE8, b: 0xD8, a: 255 }, // 0x2C
+  { r: 0x78, g: 0x78, b: 0x78, a: 255 }, // 0x2D
+  { r: 0x00, g: 0x00, b: 0x00, a: 255 }, // 0x2E
+  { r: 0x00, g: 0x00, b: 0x00, a: 255 }, // 0x2F
+&nbsp;
+  // 0x30 - 0x3F
+  { r: 0xFC, g: 0xFC, b: 0xFC, a: 255 }, // 0x30
+  { r: 0xA4, g: 0xE4, b: 0xFC, a: 255 }, // 0x31
+  { r: 0xB8, g: 0xB8, b: 0xF8, a: 255 }, // 0x32
+  { r: 0xD8, g: 0xB8, b: 0xF8, a: 255 }, // 0x33
+  { r: 0xF8, g: 0xB8, b: 0xF8, a: 255 }, // 0x34
+  { r: 0xF8, g: 0xA4, b: 0xC0, a: 255 }, // 0x35
+  { r: 0xF0, g: 0xD0, b: 0xB0, a: 255 }, // 0x36
+  { r: 0xFC, g: 0xE0, b: 0xA8, a: 255 }, // 0x37
+  { r: 0xF8, g: 0xD8, b: 0x78, a: 255 }, // 0x38
+  { r: 0xD8, g: 0xF8, b: 0x78, a: 255 }, // 0x39
+  { r: 0xB8, g: 0xF8, b: 0xB8, a: 255 }, // 0x3A
+  { r: 0xB8, g: 0xF8, b: 0xD8, a: 255 }, // 0x3B
+  { r: 0x00, g: 0xFC, b: 0xFC, a: 255 }, // 0x3C
+  { r: 0xF8, g: 0xD8, b: 0xF8, a: 255 }, // 0x3D
+  { r: 0x00, g: 0x00, b: 0x00, a: 255 }, // 0x3E
+  { r: 0x00, g: 0x00, b: 0x00, a: 255 }, // 0x3F
+];
+&nbsp;
+/**
+ * Versão empacotada (u32 RGBA) para escrever direto em ImageData (Uint32Array),
+ * evitando custo por-pixel de recompor RGBA.
+ */
+export const NES_PALETTE_RGBA = new Uint32Array(64);
+for (let i = 0; i &lt; 64; i++) {
+  const c = NES_PALETTE[i];
+  NES_PALETTE_RGBA[i] = ((c.a &amp; 0xFF) &lt;&lt; 24) | ((c.b &amp; 0xFF) &lt;&lt; 16) | ((c.g &amp; 0xFF) &lt;&lt; 8) | (c.r &amp; 0xFF);
+}
+&nbsp;</pre></td></tr></table></pre>
+
+                <div class='push'></div><!-- for sticky footer -->
+            </div><!-- /wrapper -->
+            <div class='footer quiet pad2 space-top1 center small'>
+                Code coverage generated by
+                <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
+                at 2025-08-09T23:46:18.812Z
+            </div>
+        <script src="../../prettify.js"></script>
+        <script>
+            window.onload = function () {
+                prettyPrint();
+            };
+        </script>
+        <script src="../../sorter.js"></script>
+        <script src="../../block-navigation.js"></script>
+    </body>
+</html>
+    
