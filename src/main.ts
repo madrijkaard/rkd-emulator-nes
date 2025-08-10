@@ -11,17 +11,20 @@ import { Flags6502 } from './cpu/Flags6502';
 import { Renderer } from './ppu/Renderer';
 import { Ppu } from './ppu/Ppu';
 import { ControllerButton } from './io/Controller';
+import InputHandler from './ui/InputHandler';
 
 // ===================== Config =====================
 
 const ENABLE_TEST_ROM = false; // manter false para ROMs reais
 
-// Sem contagem real de ciclos ainda — heurística prática:
-const CPU_STEPS_PER_FRAME = 800;
-const MAX_STEPS_PER_FRAME = 1000;
+// Timing aproximado para ~60 FPS:
+// NES CPU ≈ 1.79 MHz → ~29.8k ciclos por frame.
+// Usamos um pequeno teto extra para amortecer variações.
+const CPU_STEPS_PER_FRAME = 30000;
+const MAX_STEPS_PER_FRAME = 32000;
 
-// Aproximação de 6 steps PPU por step CPU
-const PPU_STEPS_PER_CPU_STEP = 6;
+// PPU roda ~3x a CPU no NES
+const PPU_STEPS_PER_CPU_STEP = 3;
 
 // ===================== Estado =====================
 
@@ -29,6 +32,7 @@ let cpu: Cpu6502 | null = null;
 let ppu: Ppu | null = null;
 let ppuRenderer: Renderer | null = null;
 let memoryRef: Memory | null = null;
+let inputHandler: InputHandler | null = null;
 
 let running = false;
 let animationFrameId: number | null = null;
@@ -61,7 +65,6 @@ const el = {
 function init() {
   hookUI();
   hookKeyboardShortcuts();
-  hookKeyboardController();
   initRenderer();
   clearScreen();
   updateUI();
@@ -88,7 +91,7 @@ function hookUI() {
       await bootWithRomBytes(bytes);
       showMessage(`ROM "${file.name}" carregada. Iniciando...`, 'success');
 
-      // >>> AJUSTE #1: começa a rodar automaticamente após o load <<<
+      // começa a rodar automaticamente após o load
       startRunning();
     } catch (e) {
       handleError(e as Error);
@@ -103,66 +106,6 @@ function hookUI() {
   window.addEventListener('blur', clearControllerStates);
 }
 
-// ===================== Teclado → Controller 1 =====================
-
-function hookKeyboardController() {
-  const pressed = new Set<string>();
-
-  const setBtn = (btn: ControllerButton, down: boolean) => {
-    const c1 = memoryRef?.getController1();
-    if (!c1) return;
-    c1.setButton(btn, down);
-  };
-
-  const onKeyChange = (e: KeyboardEvent, down: boolean) => {
-    // evita repetir flood
-    if (down) {
-      if (pressed.has(e.code)) return;
-      pressed.add(e.code);
-    } else {
-      pressed.delete(e.code);
-    }
-
-    switch (e.code) {
-      // Direções
-      case 'ArrowUp': setBtn(ControllerButton.Up, down); break;
-      case 'ArrowDown': setBtn(ControllerButton.Down, down); break;
-      case 'ArrowLeft': setBtn(ControllerButton.Left, down); break;
-      case 'ArrowRight': setBtn(ControllerButton.Right, down); break;
-
-      // Botões — layout "FCEUX-like"
-      // Z = A, X = B (também ofereço J/K como alternativa)
-      case 'KeyZ':
-      case 'KeyJ': setBtn(ControllerButton.A, down); break;
-      case 'KeyX':
-      case 'KeyK': setBtn(ControllerButton.B, down); break;
-
-      // Start / Select
-      case 'Enter': setBtn(ControllerButton.Start, down); break;
-      case 'ShiftRight':
-      case 'ShiftLeft': setBtn(ControllerButton.Select, down); break;
-
-      default: break;
-    }
-  };
-
-  document.addEventListener('keydown', (e) => onKeyChange(e, true));
-  document.addEventListener('keyup', (e) => onKeyChange(e, false));
-}
-
-function clearControllerStates() {
-  const c1 = memoryRef?.getController1();
-  const c2 = memoryRef?.getController2();
-  if (!c1) return;
-  for (const b of [
-    ControllerButton.A, ControllerButton.B, ControllerButton.Select, ControllerButton.Start,
-    ControllerButton.Up, ControllerButton.Down, ControllerButton.Left, ControllerButton.Right,
-  ]) {
-    c1.setButton(b, false);
-    c2?.setButton(b, false);
-  }
-}
-
 // ===================== Atalhos de execução =====================
 
 function hookKeyboardShortcuts() {
@@ -174,7 +117,8 @@ function hookKeyboardShortcuts() {
       case 'F5': startRunning(); break;
       case 'F6': pauseExecution(); break;
       case 'F8': stepExecution(); break;
-      case ' ': running ? pauseExecution() : startRunning(); break;
+      // OBS: não usamos a barra de espaço para run/pause
+      // para não conflitar com Select (Space) do controle.
     }
   });
 }
@@ -206,6 +150,10 @@ async function bootWithRomBytes(romBytes: Uint8Array) {
   } else if (mapperId === 4) {
     memory.attachMapper(new Mapper4(loader.prgRom, loader.chrRom, mirroring));
   }
+
+  // (Re)inicia o handler de input com o novo barramento
+  if (inputHandler) inputHandler.dispose();
+  inputHandler = new InputHandler(memory);
 
   cpu = new Cpu6502(memory);
   ppu = memory.getPpu();
@@ -460,6 +408,21 @@ function handleError(err: Error) {
   console.error(err);
   showMessage(`Erro: ${err.message}`, 'error');
   pauseExecution();
+}
+
+// ===================== Controller helpers =====================
+
+function clearControllerStates() {
+  const c1 = memoryRef?.getController1();
+  const c2 = memoryRef?.getController2();
+  if (!c1) return;
+  for (const b of [
+    ControllerButton.A, ControllerButton.B, ControllerButton.Select, ControllerButton.Start,
+    ControllerButton.Up, ControllerButton.Down, ControllerButton.Left, ControllerButton.Right,
+  ]) {
+    c1.setButton(b, false);
+    c2?.setButton(b, false);
+  }
 }
 
 // ===================== Start =====================
