@@ -2,10 +2,8 @@
 import { RomLoader } from './rom/RomLoader';
 import { Memory } from './memory/Memory';
 import { Cpu6502 } from './cpu/Cpu6502';
-import { Mapper0 } from './mappers/Mapper0';
-import { Mapper2 } from './mappers/Mapper2';
-import { Mapper4 } from './mappers/Mapper4';
 import { Mirroring } from './mappers/Mirroring';
+import { createMapper } from './mappers/MapperFactory';
 import { disassemble6502 } from './cpu/Disassembler';
 import { Flags6502 } from './cpu/Flags6502';
 import { Renderer } from './ppu/Renderer';
@@ -128,10 +126,10 @@ function hookKeyboardShortcuts() {
 async function bootWithRomBytes(romBytes: Uint8Array) {
   const loader = new RomLoader(romBytes);
 
-  // Suporte: 0 (NROM), 2 (UxROM), 4 (MMC3)
+  // Suporte: 0 (NROM), 1 (MMC1), 2 (UxROM), 4 (MMC3)
   const mapperId = loader.header.mapper;
-  if (![0, 2, 4].includes(mapperId)) {
-    throw new Error(`Mapper não suportado: ${mapperId}. (Suportados: 0, 2, 4)`);
+  if (![0, 1, 2, 4].includes(mapperId)) {
+    throw new Error(`Mapper não suportado: ${mapperId}. (Suportados: 0, 1, 2, 4)`);
   }
 
   const mirroring = loader.header.fourScreen
@@ -143,13 +141,9 @@ async function bootWithRomBytes(romBytes: Uint8Array) {
   const memory = new Memory();
   memoryRef = memory;
 
-  if (mapperId === 0) {
-    memory.attachMapper(new Mapper0(loader.prgRom, loader.chrRom, mirroring));
-  } else if (mapperId === 2) {
-    memory.attachMapper(new Mapper2(loader.prgRom, loader.chrRom, mirroring));
-  } else if (mapperId === 4) {
-    memory.attachMapper(new Mapper4(loader.prgRom, loader.chrRom, mirroring));
-  }
+  // Usa a fábrica central para criar o mapper apropriado (0/1/2/4)
+  const mapper = createMapper(mapperId, loader.prgRom, loader.chrRom, mirroring);
+  memory.attachMapper(mapper);
 
   // (Re)inicia o handler de input com o novo barramento
   if (inputHandler) inputHandler.dispose();
