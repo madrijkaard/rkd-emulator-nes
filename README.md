@@ -52,20 +52,6 @@ Foi o console que **revitalizou a indústria dos videogames** após a crise de 1
 
 ---
 
-## ✅ Implementação Atual (resumo)
-- **Carregamento de ROMs iNES/NES 2.0** com parsing de cabeçalho e *trainer* (quando houver).
-- **Mappers suportados**: **0 (NROM)**, **1 (MMC1)**, **2 (UxROM)**, **4 (MMC3)** com IRQ por A12.
-- **CPU 6502** completa o bastante para jogos e testes (ALU, stack, branches, JSR/RTS/RTI, NOPs, ilegais comuns, IRQ/NMI).
-- **PPU**:
-  - Registradores `$2000–$2007` (PPUCTRL/PPUMASK/PPUSTATUS, OAMADDR/OAMDATA, PPUSCROLL/PPUADDR/PPUDATA)
-  - VRAM/CHR e **nametables com mirroring** (Horizontal/Vertical/FourScreen)
-  - **VBlank/NMI**, **OAM DMA ($4014)**, **sprite 0 hit**, **render de BG e sprites (8×8/8×16)**  
-  - **Scroll real (loopy v/t/x/w)**, cópias horizontais/verticais simplificadas
-  - **Borda A12 sintetizada por scanline** p/ IRQ do MMC3
-- **Renderer (Canvas 2D)** com paleta NES (64 cores) e composição BG/Sprites.
-
----
-
 ## 🗂️ O que cada arquivo faz (guia rápido)
 
 > Dica: caminhos com `__tests__` são testes de unidade (Vitest).
