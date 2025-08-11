@@ -5,15 +5,15 @@
 // - CONTROL: mirroring (0..3), PRG mode (2 bits), CHR mode (1 bit)
 // - CHR: 8KB ou 4KB+4KB, dependendo do CHR mode
 // - PRG: 32KB ou 16KB com janela fixa no início/fim (modes 2/3)
-// Observação sobre mirroring: o hardware suporta "OneScreen A/B", mas como
-// a PPU atual só entende Horizontal/Vertical/FourScreen, mapeamos:
-//   CONTROL.mirror = 0 (OneScreen A) → Mirroring.Horizontal (aproximação)
-//   CONTROL.mirror = 1 (OneScreen B) → Mirroring.Vertical   (aproximação)
+//
+// Observação sobre mirroring (aproximação):
+//   CONTROL.mirror = 0 (OneScreen A) → Mirroring.Horizontal
+//   CONTROL.mirror = 1 (OneScreen B) → Mirroring.Vertical
 //   2 → Vertical; 3 → Horizontal
 //
-// Nota sobre PRG-RAM ($6000–$7FFF):
-// Seu barramento atual (Memory) não delega essa faixa ao mapper, então esta
-// implementação não trata PRG-RAM. Isso é condizente com Mapper0/4 no projeto.
+// PRG-RAM ($6000–$7FFF):
+// O seu barramento (Memory) delega $4020+ ao mapper, então aqui implementamos
+// a PRG-RAM de 8KB acessível sempre (sem enable/disable). Os testes dependem disso.
 
 import type { Mapper } from './Mapper';
 import { Mirroring } from './Mirroring';
@@ -23,6 +23,10 @@ export class Mapper1 implements Mapper {
   private prg: Uint8Array;
   private chr: Uint8Array; // se vier size=0, alocamos CHR-RAM 8KB
   private hasChrRam: boolean;
+
+  // -------- PRG-RAM 8KB ($6000-$7FFF) --------
+  private prgRam = new Uint8Array(0x2000);
+  private prgRamEnabled = true; // mantemos sempre habilitada para este projeto
 
   // Bancagem corrente (índices em unidades de 16KB para PRG e 4KB para CHR)
   private control = 0x0C; // reset padrão: PRG mode=3, CHR mode=0, mirror=0
@@ -67,7 +71,7 @@ export class Mapper1 implements Mapper {
     // Espelhamento inicial: honrar o default passado pelo header até alguém escrever CONTROL
     this.mirroring = this.mirroring ?? Mirroring.Horizontal;
 
-    // Resolve janelas conforme control/bancos
+    // IMPORTANTE: não limpamos this.prgRam aqui — os testes esperam persistência
     this.updateBanks();
   }
 
@@ -75,9 +79,17 @@ export class Mapper1 implements Mapper {
     return this.mirroring;
   }
 
-  // CPU $4020–$FFFF (Memory só delega $4020+)
+  // CPU $4020–$FFFF (Memory delega $4020+)
   cpuRead(addr: number): number {
     addr &= 0xFFFF;
+
+    // --- PRG-RAM $6000-$7FFF ---
+    if (addr >= 0x6000 && addr < 0x8000) {
+      if (this.prgRamEnabled) {
+        return this.prgRam[addr & 0x1FFF];
+      }
+      return 0x00;
+    }
 
     if (addr >= 0x8000) {
       const off = addr - 0x8000;
@@ -98,8 +110,16 @@ export class Mapper1 implements Mapper {
     addr &= 0xFFFF;
     value &= 0xFF;
 
+    // --- PRG-RAM $6000-$7FFF ---
+    if (addr >= 0x6000 && addr < 0x8000) {
+      if (this.prgRamEnabled) {
+        this.prgRam[addr & 0x1FFF] = value;
+      }
+      return;
+    }
+
     if (addr < 0x8000) {
-      // Projeto atual não roteia PRG-RAM ($6000–$7FFF) para o mapper.
+      // fora da faixa de registradores MMC1
       return;
     }
 
@@ -115,7 +135,6 @@ export class Mapper1 implements Mapper {
     }
 
     // Carrega LSB no topo do shift (MMC1: bits entram como LSB-first)
-    // Implementação clássica: shift = (shift >> 1) | ((value & 1) << 4)
     const inBit = value & 1;
     this.shift = (this.shift >> 1) | (inBit << 4);
     this.writes++;
@@ -215,7 +234,7 @@ export class Mapper1 implements Mapper {
     switch (mir) {
       case 2: this.mirroring = Mirroring.Vertical; break;
       case 3: this.mirroring = Mirroring.Horizontal; break;
-      // OneScreen A/B — aproximamos:
+      // OneScreen A/B — aproximações:
       case 0: this.mirroring = Mirroring.Horizontal; break; // OneScreen A ≈ Horizontal
       case 1: this.mirroring = Mirroring.Vertical;   break; // OneScreen B ≈ Vertical
     }

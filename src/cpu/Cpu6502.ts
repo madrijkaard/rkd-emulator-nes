@@ -6,6 +6,7 @@ import { Flags6502 } from './Flags6502'
  * Implementação completa do 6502:
  * - Todos os opcodes oficiais
  * - NOPs não-oficiais comuns (DOP/TOP) tratados como NOP (consomem operandos corretos)
+ * - Ilegais SLO (ASL em memória + ORA com A) implementados
  * - Sem contagem de ciclos (o NES 2A03 ignora modo decimal; ADC/SBC binários)
  *
  * Observações:
@@ -263,6 +264,17 @@ export class Cpu6502 {
     this.setZN(r)
   }
 
+  /** Ilegal: SLO — ASL em memória + ORA com A (C do ASL; Z/N do novo A) */
+  private SLO(addr: number): void {
+    const v = this.memory.read(addr) & 0xff
+    const carry = (v & 0x80) !== 0
+    const shifted = (v << 1) & 0xff
+    this.memory.write(addr, shifted)
+    this.setFlag(Flags6502.Carry, carry)
+    this.A = (this.A | shifted) & 0xff
+    this.setZN(this.A)
+  }
+
   // ===================== Execução =====================
 
   step(): void {
@@ -478,6 +490,15 @@ export class Cpu6502 {
         break
       }
       case 0xEA: break // NOP oficial 1 byte
+
+      // --------- Ilegais: SLO (ASL mem + ORA A) ---------
+      case 0x07: this.SLO(this.zp()); break       // SLO zp
+      case 0x17: this.SLO(this.zpX()); break      // SLO zp,X
+      case 0x0F: this.SLO(this.abs()); break      // SLO abs
+      case 0x1F: this.SLO(this.absX()); break     // SLO abs,X
+      case 0x1B: this.SLO(this.absY()); break     // SLO abs,Y
+      case 0x03: this.SLO(this.indX()); break     // SLO (zp,X)
+      case 0x13: this.SLO(this.indY()); break     // SLO (zp),Y
 
       // --------- NOPs não-oficiais (consumir operandos corretos) ---------
       // 1 byte

@@ -1,3 +1,4 @@
+// src/cpu/__tests__/Cpu6502.test.ts
 import { describe, it, expect } from "vitest";
 import { Cpu6502 } from "../Cpu6502";
 import { Flags6502 } from "../Flags6502";
@@ -221,15 +222,14 @@ describe("CPU6502 - Casos Especiais", () => {
 });
 
 describe("CPU6502 - Instruções não oficiais", () => {
-  // ⚠️ Ainda não implementadas no CPU: SLO (0x03/0x07/0x0F).
-  it.skip("SLO zeropage realiza ASL + ORA corretamente", () => {
+  it("SLO zeropage realiza ASL + ORA corretamente", () => {
     const cpu = createCpuWithProgram([
       0xa9, 0x11, // LDA #$11
       0x07, 0x10, // SLO $10
     ]);
     cpu.memory.write(0x0010, 0b10000001);
     cpu.step(); // LDA
-    cpu.step(); // SLO
+    cpu.step(); // SLO (zp): mem << 1 => 0x02, C=1; A |= 0x02 => 0x13
     expect(cpu.read(0x0010)).toBe(0x02);
     expect(cpu.A).toBe(0x13);
     expect(cpu.getFlag(Flags6502.Carry)).toBe(true);
@@ -237,36 +237,40 @@ describe("CPU6502 - Instruções não oficiais", () => {
     expect(cpu.getFlag(Flags6502.Negative)).toBe(false);
   });
 
-  it.skip("SLO absolute realiza ASL + ORA corretamente", () => {
+  it("SLO absolute realiza ASL + ORA corretamente (usa RAM, não ROM)", () => {
     const cpu = createCpuWithProgram([
       0xa9, 0x11,       // LDA #$11
-      0x0f, 0x00, 0x90, // SLO $9000
-    ], 0x8000, [{ addr: 0x9000, bytes: [0x81] }]);
+      0x0f, 0x00, 0x02, // SLO $0200
+    ]);
+
+    // inicializa RAM em $0200 com 0x81
+    cpu.memory.write(0x0200, 0x81);
 
     cpu.step(); // LDA
     cpu.step(); // SLO absolute
-    expect(cpu.read(0x9000)).toBe(0x02);
+    expect(cpu.read(0x0200)).toBe(0x02);
     expect(cpu.A).toBe(0x13);
     expect(cpu.getFlag(Flags6502.Carry)).toBe(true);
     expect(cpu.getFlag(Flags6502.Zero)).toBe(false);
     expect(cpu.getFlag(Flags6502.Negative)).toBe(false);
   });
 
-  it.skip("SLO (zp,X) realiza ASL + ORA corretamente", () => {
+  it("SLO (zp,X) realiza ASL + ORA corretamente (ponteiro para RAM)", () => {
     const cpu = createCpuWithProgram([
       0xa9, 0x11, // LDA #$11
       0xa2, 0x04, // LDX #$04
       0x03, 0x20, // SLO ($20,X)
-    ], 0x8000, [{ addr: 0x9000, bytes: [0x81] }]);
+    ]);
 
-    // ponteiro na ZP ($20+X=4 -> $24/$25) apontando para $9000
+    // ponteiro na ZP ($20+X=4 -> $24/$25) apontando para $0200 (RAM)
     cpu.memory.write(0x0024, 0x00);
-    cpu.memory.write(0x0025, 0x90);
+    cpu.memory.write(0x0025, 0x02);
+    cpu.memory.write(0x0200, 0x81);
 
     cpu.step(); // LDA
     cpu.step(); // LDX
     cpu.step(); // SLO (zp,X)
-    expect(cpu.read(0x9000)).toBe(0x02);
+    expect(cpu.read(0x0200)).toBe(0x02);
     expect(cpu.A).toBe(0x13);
     expect(cpu.getFlag(Flags6502.Carry)).toBe(true);
     expect(cpu.getFlag(Flags6502.Zero)).toBe(false);
